@@ -9,3 +9,5 @@ dist/
 .next/
 *.log
 lib/
+deployments/*.env
+.vendor/

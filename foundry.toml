@@ -16,4 +16,4 @@ tab_width = 4
 
 [rpc_endpoints]
 og_mainnet = "https://evmrpc.0g.ai"
-og_testnet = "https://evmrpc-testnet.0g.ai"
+og_testnet = "https://evmrpc-testnet.0g.ai"  # chain 16602

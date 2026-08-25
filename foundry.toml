@@ -1,0 +1,19 @@
+[profile.default]
+src = "contracts/src"
+test = "contracts/test"
+script = "contracts/script"
+out = "out"
+libs = ["lib"]
+solc_version = "0.8.24"
+optimizer = true
+optimizer_runs = 20000
+via_ir = true
+evm_version = "paris"
+
+[fmt]
+line_length = 110
+tab_width = 4
+
+[rpc_endpoints]
+og_mainnet = "https://evmrpc.0g.ai"
+og_testnet = "https://evmrpc-testnet.0g.ai"

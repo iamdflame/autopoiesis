@@ -9,5 +9,5 @@ dist/
 .next/
 *.log
 lib/
-deployments/*.env
+# deployments/*.env - tracked: these are public addresses
 .vendor/

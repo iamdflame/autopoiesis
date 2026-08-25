@@ -1,97 +1,80 @@
 #!/usr/bin/env bash
-# Brings on-chain Intel DCAP attestation to 0G.
+# Brings on-chain Intel DCAP attestation to 0G, stage by stage.
 #
-# This deploys third-party infrastructure (Automata's PCCS + DCAP contracts) that 0G
-# does not have yet. Once it exists, anyone on 0G can verify SGX and TDX quotes on
-# chain — we happen to be its first user.
+# 0G has none of this today. Each stage records its addresses to deployments/<net>.env
+# so a failure is resumable rather than a restart. Run it repeatedly; completed stages
+# are skipped.
 #
-# Everything here is idempotent-ish: addresses are recorded to deployments/<net>.env
-# as they are produced, so a failed run can be resumed rather than restarted.
+# Stages:
+#   0  P256 verifier      Intel signs with secp256r1; the EVM cannot verify it natively
+#   1  PCCS helpers       X509 / CRL / TCB / enclave-identity parsers
+#   2  PCCS DAOs          the on-chain store for Intel's collateral
+#   3  DCAP router        reads collateral out of PCCS
+#   4  DCAP entrypoint    verifyAndAttestOnChain lives here
+#   5  V4 quote verifier  TDX, registered against the entrypoint
 set -euo pipefail
 
-NET="${NET:-testnet}"
+NET="${NET:-mainnet}"
 case "$NET" in
-  testnet) RPC="https://evmrpc-testnet.0g.ai"; CHAIN=16602 ;;
   mainnet) RPC="https://evmrpc.0g.ai";         CHAIN=16661 ;;
-  *) echo "NET must be testnet or mainnet" >&2; exit 1 ;;
+  testnet) RPC="https://evmrpc-testnet.0g.ai"; CHAIN=16602 ;;
+  *) echo "NET must be mainnet or testnet" >&2; exit 1 ;;
 esac
-: "${PRIVATE_KEY:?run 'make preflight NET=$NET' first}"
+: "${PRIVATE_KEY:?PRIVATE_KEY not set}"
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-VENDOR="$ROOT/.vendor"
-OUT="$ROOT/deployments/$NET.env"
-mkdir -p "$VENDOR" "$ROOT/deployments"
-touch "$OUT"; . "$OUT" 2>/dev/null || true
+VENDOR="$ROOT/.vendor"; LOGS="$ROOT/deployments"; OUT="$LOGS/$NET.env"
+mkdir -p "$LOGS"; touch "$OUT"; . "$OUT" 2>/dev/null || true
+export RPC_URL="$RPC" PRIVATE_KEY
+OWNER=$(cast wallet address --private-key "$PRIVATE_KEY")
+export OWNER
 
-step(){ printf "\n\033[1m▸ %s\033[0m\n" "$*"; }
-save(){ grep -v "^$1=" "$OUT" > "$OUT.tmp" 2>/dev/null || true; mv -f "$OUT.tmp" "$OUT" 2>/dev/null || true
-        echo "$1=$2" >> "$OUT"; printf "  \033[32m✓\033[0m %s=%s\n" "$1" "$2"; }
+stage(){ printf "\n\033[1m▸ stage %s — %s\033[0m\n" "$1" "$2"; }
+done_(){ printf "  \033[32m✓\033[0m %s\n" "$*"; }
 
-clone(){ # repo dir
-  if [ ! -d "$VENDOR/$2" ]; then
-    step "fetching $2"
-    git clone --depth 1 "$1" "$VENDOR/$2"
-    ( cd "$VENDOR/$2" && forge install 2>/dev/null || true )
-  fi
-}
+# ── 0 ─ P256 ────────────────────────────────────────────────────────────────
+stage 0 "P256 verifier"
+NET="$NET" "$ROOT/scripts/deploy-p256.sh"
 
-# ---------------------------------------------------------------------------
-step "0G $NET — chain $CHAIN, deployer $(cast wallet address --private-key "$PRIVATE_KEY")"
-
-clone https://github.com/automata-network/automata-on-chain-pccs pccs
-clone https://github.com/automata-network/automata-dcap-attestation dcap
-
-# --- 1. on-chain PCCS: where Intel collateral lives ------------------------
-if [ -z "${PCCS_STORAGE:-}" ]; then
-  step "deploying on-chain PCCS (collateral store + DAOs)"
-  ( cd "$VENDOR/pccs" && PRIVATE_KEY="$PRIVATE_KEY" RPC_URL="$RPC" \
-      forge script script/DeployAll.s.sol --rpc-url "$RPC" --broadcast --slow -vv \
-      2>&1 | tee "$ROOT/deployments/pccs-$NET.log" )
-  echo
-  echo "  Read the addresses out of deployments/pccs-$NET.log and record them:"
-  echo "    scripts/record.sh $NET PCCS_STORAGE 0x..."
-  echo "    scripts/record.sh $NET PCS_DAO 0x...  (and the other DAOs)"
-  echo
-  echo "  Then re-run: make dcap NET=$NET"
-  exit 0
+# ── 1 ─ PCCS helpers ────────────────────────────────────────────────────────
+DEPLOY_JSON="$VENDOR/pccs/deployment/$CHAIN.json"
+if [ ! -f "$DEPLOY_JSON" ] || [ -z "$(jq -r '.PCKHelper // empty' "$DEPLOY_JSON" 2>/dev/null)" ]; then
+  stage 1 "PCCS helpers"
+  ( cd "$VENDOR/pccs" && make deploy-helpers RPC_URL="$RPC" PRIVATE_KEY="$PRIVATE_KEY" ) \
+    2>&1 | tee "$LOGS/pccs-helpers-$NET.log" | grep -E "Deploy|deployed|0x[0-9a-fA-F]{40}|Error" | tail -12
+else
+  done_ "helpers already recorded in $DEPLOY_JSON"
 fi
 
-# --- 2. DCAP router + entrypoint + verifiers -------------------------------
+# ── 2 ─ PCCS DAOs ───────────────────────────────────────────────────────────
+if [ -z "$(jq -r '.AutomataPcsDao // empty' "$DEPLOY_JSON" 2>/dev/null)" ]; then
+  stage 2 "PCCS DAOs"
+  ( cd "$VENDOR/pccs" && make deploy-dao RPC_URL="$RPC" PRIVATE_KEY="$PRIVATE_KEY" ) \
+    2>&1 | tee "$LOGS/pccs-dao-$NET.log" | grep -E "Deploy|deployed|0x[0-9a-fA-F]{40}|Error" | tail -14
+else
+  done_ "DAOs already recorded"
+fi
+
+[ -f "$DEPLOY_JSON" ] && { echo; echo "  PCCS addresses:"; jq -r 'to_entries[] | "    \(.key) = \(.value)"' "$DEPLOY_JSON"; }
+
+# ── 3-5 ─ DCAP ──────────────────────────────────────────────────────────────
+cd "$VENDOR/dcap/evm"
 if [ -z "${DCAP_ROUTER:-}" ]; then
-  step "deploying PCCS router"
-  ( cd "$VENDOR/dcap/evm" && PRIVATE_KEY="$PRIVATE_KEY" \
-      make deploy-router RPC_URL="$RPC" 2>&1 | tee "$ROOT/deployments/router-$NET.log" )
-  echo "  record with: scripts/record.sh $NET DCAP_ROUTER 0x..."
+  stage 3 "DCAP PCCS router"
+  make deploy-router RPC_URL="$RPC" PRIVATE_KEY="$PRIVATE_KEY" 2>&1 \
+    | tee "$LOGS/router-$NET.log" | grep -E "0x[0-9a-fA-F]{40}|Error" | tail -6
+  echo "  record it:  scripts/record.sh $NET DCAP_ROUTER 0x..."
   exit 0
 fi
-
 if [ -z "${DCAP_VERIFIER:-}" ]; then
-  step "deploying attestation entrypoint"
-  ( cd "$VENDOR/dcap/evm" && PRIVATE_KEY="$PRIVATE_KEY" \
-      make deploy-attestation RPC_URL="$RPC" 2>&1 | tee "$ROOT/deployments/attestation-$NET.log" )
-  echo "  record with: scripts/record.sh $NET DCAP_VERIFIER 0x..."
+  stage 4 "DCAP attestation entrypoint"
+  make deploy-attestation RPC_URL="$RPC" PRIVATE_KEY="$PRIVATE_KEY" 2>&1 \
+    | tee "$LOGS/attestation-$NET.log" | grep -E "0x[0-9a-fA-F]{40}|Error" | tail -6
+  echo "  record it:  scripts/record.sh $NET DCAP_VERIFIER 0x..."
   exit 0
 fi
-
-step "deploying V4 quote verifier (TDX) and registering it"
-( cd "$VENDOR/dcap/evm" && PRIVATE_KEY="$PRIVATE_KEY" \
-    make deploy-verifier RPC_URL="$RPC" QUOTE_VERIFIER_VERSION=4 && \
-    make config-verifier RPC_URL="$RPC" QUOTE_VERIFIER_VERSION=4 )
-
-step "seeding Intel collateral into on-chain PCCS"
-cat <<'NOTE'
-  This is the step that most often needs a human. The PCCS must hold Intel's root
-  CA, the TCBInfo for the provider's FMSPC, and the QEIdentity, or every quote
-  verifies to false and the organism can never draw a breath.
-
-  Automata's upsert scripts pull these from Intel's PCS API. The FMSPC you need is
-  the one belonging to the actual 0G Compute provider whose CVM will run the
-  organism — you cannot know it until you have a quote from that provider.
-
-  So the order is: get one quote from the 0G provider, read its FMSPC, seed that
-  collateral, then verify. See:
-    .vendor/pccs/README.md   (upsert-* targets)
-NOTE
-
-step "done — DCAP_VERIFIER=${DCAP_VERIFIER}"
-echo "  next:  make biosphere NET=$NET"
+stage 5 "V4 quote verifier (TDX)"
+make deploy-verifier RPC_URL="$RPC" PRIVATE_KEY="$PRIVATE_KEY" QUOTE_VERIFIER_VERSION=4 2>&1 | tail -6
+make config-verifier RPC_URL="$RPC" PRIVATE_KEY="$PRIVATE_KEY" QUOTE_VERIFIER_VERSION=4 2>&1 | tail -6
+done_ "DCAP live — DCAP_VERIFIER=$DCAP_VERIFIER"
+echo "  next: make biosphere NET=$NET"

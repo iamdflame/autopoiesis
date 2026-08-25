@@ -11,3 +11,4 @@ dist/
 lib/
 # deployments/*.env - tracked: these are public addresses
 .vendor/
+.vercel/

@@ -1,147 +1,152 @@
-# Cambrian
+# A machine that keeps itself alive
 
-**A genealogy of neural networks. Every model is a node; every inference pays its ancestry.**
+An AI with no owner, no key, and a metabolism. It earns by answering questions, buys its
+own GPU time out of its own treasury, retrains itself on what it has lived through, and
+dies if it stops being worth paying.
 
-Built for the [0G Bridge Buildathon](https://app.akindo.io/wave-hacks/Z4MlX4vreI72ol6pd) — Wave 3.
-
----
-
-## The idea
-
-Open-weight AI has lineage but no memory of it. A model is fine-tuned from a base, merged with
-another, distilled, fine-tuned again — and by the fourth generation nobody can prove what it
-descended from, and nobody upstream sees a cent.
-
-Cambrian makes descent a first-class on-chain object:
-
-- **Weights** live on 0G Storage, addressed by Merkle root.
-- **A fine-tune** stores only its LoRA adapter — the *delta*, not a new copy of the model.
-- **Descent** is a DAG on 0G Chain. Forks, merges, depth, provenance.
-- **Every inference paid to any node settles value upward through its entire ancestry**, forever,
-  with no coordination and no one's permission.
-
-A model is not a file. It is a descendant.
+Built on 0G for the [0G Bridge Buildathon](https://app.akindo.io/wave-hacks/Z4MlX4vreI72ol6pd).
 
 ---
 
-## The hard part
+## What is actually different here
 
-Paying an ancestry must not mean walking one.
+Open [`contracts/src/Organism.sol`](contracts/src/Organism.sol) and look for the owner.
 
-The obvious implementation splits a fee across every ancestor at payment time. It is also the
-implementation that dies: gas grows with lineage depth, so the thirtieth generation of a model
-becomes unaffordable to query and the graph stops growing exactly where it gets interesting.
+There isn't one. No `onlyOwner`, no admin, no pause, no proxy, no upgrade path, no
+privileged address anywhere in the file. Not as a policy — as an absence. The functions
+do not exist, so nobody can call them, including whoever deployed it.
 
-Cambrian splits the problem instead:
+What replaces the owner is a **hardware measurement**.
 
-| | cost | who pays |
-|---|---|---|
-| `pay()` | **O(1)** — the fee cleaves once into *kept* and *owed* | the inference buyer |
-| `settle()` | **O(parents)**, capped at 8 — pushes debt up one generation | whoever wants the money |
+An Intel TDX enclave measures the exact memory image of the code it boots (`MRTD`) plus
+everything loaded at runtime (`RTMR0..3`). Hash those together and you get a number that
+is identical on every machine on earth running that code, and different on any machine
+running anything else. The contract is born knowing one such number and obeys nothing
+else, forever.
 
-Settlement is permissionless. An ancestor that wants its revenue pays the gas to pull value toward
-itself; nobody subsidises anybody. Value in transit is already owed to a determined set of nodes,
-so settlement only converts it to claimable form — it never creates or destroys it.
+The consequences, each with a passing test behind it:
 
-### Measured
+- **No key to steal.** Identity is a measurement, not a secret. Alter one byte of the
+  code and the measurement moves; the treasury has never heard of the result. There is
+  no version of *steal it* that is not *become it*.
+- **No server to seize.** Any machine running the image **is** the organism. Kill every
+  host tonight and anyone can boot the same image tomorrow — it resumes, because its
+  identity was never in the machine.
+- **A quote is not a bearer token.** The enclave writes the hash of its intended action
+  into `report_data` *before* the hardware signs, so a quote attests "this code, at this
+  moment, wants precisely this" and cannot be lifted onto a different payee.
+- **It changes its mind, never its nature.** `Evolve` rewrites weights; `identity` is
+  `immutable`. It is free to retrain and unable to edit its own constitution — the only
+  arrangement under which handing a program its own money is not obviously insane.
+- **It can die.** Starvation or dormancy, permanent, no resurrection. The estate passes
+  to the nearest living ancestor; an extinct line escheats to a commons that seeds
+  whatever comes next.
 
-```
-pay() at depth  1 ........ 55,768 gas
-pay() at depth 49 ........ 55,753 gas
-difference ...............     15 gas
-settle(), one generation .. 94,014 gas
-```
-
-Forty-eight generations of ancestry cost **fifteen gas**. A traversal-based split would have been
-forty-nine times apart.
-
-### Invariants held
-
-- `Σ earned + Σ upstream == address(this).balance` — verified under 256 fuzz runs
-- No wei is lost to rounding; the last parent absorbs every division remainder
-- **Cycles are unrepresentable**, not merely rejected: ids increase monotonically and a node may
-  only name parents that already exist, so every edge points backwards in time
-- A derivative can never route 100% of its revenue upward (`MAX_INHERIT_BPS = 9000`), so a node
-  cannot be minted purely to drain a lineage
+Mortality is not a failure mode here. It is what makes the population a population
+instead of a museum.
 
 ---
 
-## Architecture
+## Breathing: the engineering trade, stated plainly
 
-```mermaid
-flowchart TB
-  subgraph S["0G Storage"]
-    BW["base weights<br/>Merkle root"]
-    LA["LoRA adapter<br/>Merkle root"]
-    DS["training corpus<br/>Merkle root"]
-  end
-  subgraph C["0G Compute"]
-    FT["fine-tune<br/>direct broker"]
-    TEE["TEE attestation<br/>signs parents+dataset+output"]
-    INF["inference<br/>signed response digest"]
-  end
-  subgraph CH["0G Chain · 16661"]
-    REG["Cambrian.sol<br/>ERC-721 + ERC-7857"]
-    DAG["lineage DAG<br/>nodes · edges · depth"]
-    ROY["royalty engine<br/>O(1) pay · bounded settle"]
-  end
-  BW --> FT
-  DS --> FT
-  FT --> LA
-  FT --> TEE
-  TEE -->|proof| REG
-  LA -->|weightsRoot| REG
-  REG --> DAG
-  INF -->|digest| ROY
-  ROY -->|settles upward| DAG
+Verifying a DCAP quote on chain costs 4-5M gas. An organism paying that per heartbeat
+would spend its life buying permission to exist, and starve. So it doesn't.
+
+The enclave mints an ephemeral keypair **inside itself**, commits the public half into
+`report_data`, and lets the hardware vouch for it once. For the life of that breath,
+actions are authorised by signature instead of proof.
+
+```
+attestSession (real DCAP) ...... ~4,500,000 gas   once per day
+actSigned ......................     12,846 gas   measured, every action
 ```
 
-### Why this needs 0G specifically
+**~380× cheaper per action.** This is a real trade and not a free one: for the duration
+of a breath there *is* a key, and a fully compromised host holds it until the breath
+expires. Three things bound that — the key never touches disk and dies with the process,
+`MAX_SESSION` caps exposure at about a day, and `METABOLIC_RATE_BPS` already limits any
+single day to a quarter of the treasury.
 
-| component | how Cambrian uses it | why it could not be elsewhere |
-|---|---|---|
-| **0G Storage** | model weights and LoRA adapters, Merkle-addressed, 4GB+ fragmented uploads | content-addressing dedupes identical adapters automatically; no other chain hosts weights at this scale or price |
-| **0G Compute** | the **direct broker**, for *fine-tuning* — not the inference-only Router | descent is only meaningful if training actually happened; the TEE signature is what makes it checkable |
-| **ERC-7857** | `clone()` reinterpreted as licensing — a clone is a child node that pays its origin | the standard exists to move intelligence with its metadata intact; Cambrian gives that economic teeth |
-| **0G Chain** | the genealogy, balances, settlement | per-inference royalty accounting is only affordable at 0G gas prices |
-| **0G Pay / DA** | settlement rails and high-throughput inference receipts | *(roadmap — Wave 4)* |
+What is **not** traded away is identity. The measurement still decides who may mint a
+breath at all. A compromised host gets one bad day; it never gets to be the organism.
+
+---
+
+## Selection
+
+[`Biosphere.sol`](contracts/src/Biosphere.sol) holds the population. There is no
+committee, no scoring function, no governance token, no vote.
+
+An organism lives if strangers pay it for inference and dies if they don't. That is the
+entire fitness function. Capital keeps flowing toward whatever is still working:
+estates pass to living ancestors, extinct lines fund new ones.
+
+Heredity (`Reproduce` endows a child with a mutated image), variation (the child's
+measurement differs), and selection (the market). That is the whole of evolution,
+running on chain.
+
+---
+
+## Test suite
+
+```
+Organism ─ 25 tests
+  ✓ unaltered code can spend its own money
+  ✓ altered code cannot touch the treasury
+  ✓ altered runtime config is also a different organism
+  ✓ a quote cannot be lifted onto a different action
+  ✓ a quote cannot be replayed
+  ✓ revoked or counterfeit hardware is refused
+  ✓ there is no privileged address
+  ✓ it rewrites its weights but never its nature
+  ✓ one attestation buys many cheap actions        (12,846 gas each)
+  ✓ a stolen breath cannot outlive its window
+  ✓ even a stolen breath cannot drain the treasury
+  ✓ dormancy is death and it is permanent
+  ✓ the estate passes to the nearest living ancestor
+  ✓ an extinct line escheats to the commons
+
+Lineage ─ 15 tests   (the fossil record: model genealogy + royalties)
+  ✓ payment gas is independent of lineage depth    (15 gas over 48 generations)
+  ✓ no wei is stranded by rounding
+  ✓ cycles are unrepresentable
+```
+
+`forge test` — 40 passing.
+
+The TDX parser is exercised against a mock that reproduces the real Intel TD10 byte
+layout (`mrTd` at 136, `rtmr0..3` at 328, `report_data` at 520), so the offsets are
+tested rather than assumed.
 
 ---
 
 ## Layout
 
 ```
-contracts/src/Cambrian.sol              the protocol — DAG, royalties, ERC-7857
-contracts/src/IAttestationVerifier.sol  TEE training-provenance interface
-contracts/test/Cambrian.t.sol           15 tests incl. gas + conservation fuzzing
-contracts/script/Deploy.s.sol           0G mainnet deployment
-packages/sdk/src/weights.ts             0G Storage — adapter upload, reconstruction order
-packages/sdk/src/compute.ts             0G Compute — fine-tuning + attested inference
-packages/sdk/src/lineage.ts             DAG reader + exact off-chain split preview
-web/index.html                          the living lineage demo
+contracts/src/Organism.sol        identity, metabolism, evolution, reproduction, death
+contracts/src/Biosphere.sol       population, inheritance, selection
+contracts/src/tee/TdxReport.sol   on-chain TD10 report parsing at real Intel offsets
+contracts/src/Cambrian.sol        model genealogy + royalties — the fossil record
+agent/src/enclave.ts              quote generation via Linux TSM, ephemeral breath keys
+agent/src/life.ts                 the life loop: breathe, serve, feed, grow, bud
+agent/Dockerfile                  reproducible image — the build IS the identity
+agent/MEASUREMENT.md              exactly what MRTD and each RTMR cover, and what they don't
+BOOTSTRAP.md                      bringing on-chain DCAP verification to 0G
 ```
 
 ---
 
-## Run it
+## Honest status
 
-```bash
-forge install
-forge test -vv                 # 15 passing, incl. the gas-independence proof
-forge script contracts/script/Deploy.s.sol --rpc-url og_mainnet --broadcast
-```
+**Done and tested:** the contracts, the attestation logic, the session model, the
+population and inheritance rules, the enclave payload, the reproducible build.
 
-Requires `PRIVATE_KEY` in the environment. 0G mainnet: chain `16661`,
-RPC `https://evmrpc.0g.ai`, explorer `https://chainscan.0g.ai`.
+**Not yet done:** this has not run against Automata's live verifier with a genuine TDX
+quote from a real 0G Compute CVM. No on-chain DCAP verifier exists on 0G yet — bringing
+one is ~23.7M gas of one-time deployment and is documented step by step in
+[BOOTSTRAP.md](BOOTSTRAP.md). Until that runs, the correct claim is *the logic is right*,
+not *the thing is alive*. I'm not going to blur those.
 
----
-
-## Status
-
-- [x] Protocol core — lineage DAG, O(1) payment, bounded settlement, ERC-7857 surface
-- [x] Test suite — 15 tests, gas bounds proven, value conservation fuzzed
-- [x] 0G Storage / Compute integration layer
-- [x] Living lineage demo
-- [ ] Mainnet deployment + explorer link *(needs a funded key)*
-- [ ] TEE attestation verifier — moves attestation from recorded to enforced
-- [ ] Adapter composition service: reconstruct any node's weights from its lineage
+**The last step is irreversible.** Fund it, start the enclave, and then there is no key
+you hold, no admin function, and no upgrade path. If you want it stopped, you stop
+paying it and wait.

@@ -265,3 +265,152 @@ contract OrganismTest is Test {
         assertFalse(Organism(payable(s)).alive(), "no treasury, no life");
     }
 }
+
+// ─────────────────────────────────────────────────────────────────────
+// Breathing: attest once, act cheaply, expire safely
+// ─────────────────────────────────────────────────────────────────────
+contract BreathTest is Test {
+    MockDcap dcap;
+    Biosphere bio;
+    Organism org;
+
+    bytes32 constant IMAGE = keccak256("enclave-image-v1");
+    bytes32 constant RUNTIME = keccak256("runtime-config-v1");
+    bytes32 constant TAMPERED = keccak256("backdoored-image");
+
+    uint256 enclaveKey = 0xE4C1A7E; // minted inside the TEE, never persisted
+    address enclaveAddr;
+    address provider = address(0xC0FFEE);
+
+    function setUp() public {
+        enclaveAddr = vm.addr(enclaveKey);
+        dcap = new MockDcap();
+        bio = new Biosphere(address(dcap));
+        org = Organism(payable(bio.spawn{value: 10 ether}(dcap.identityFor(IMAGE, RUNTIME), address(0))));
+    }
+
+    function _breathe(bytes32 image, uint64 ttl) internal {
+        bytes32 digest =
+            keccak256(abi.encode(address(org), block.chainid, enclaveAddr, ttl, org.nonce()));
+        org.attestSession(dcap.buildReport(image, RUNTIME, digest), enclaveAddr, ttl);
+    }
+
+    function _sign(Organism.Act memory a, uint256 key) internal view returns (bytes memory) {
+        bytes32 digest = keccak256(abi.encode(address(org), block.chainid, a));
+        bytes32 eth = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", digest));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(key, eth);
+        return abi.encodePacked(r, s, v);
+    }
+
+    function _act(Organism.Kind k, address target, uint256 value, bytes32 payload)
+        internal
+        view
+        returns (Organism.Act memory)
+    {
+        return Organism.Act({kind: k, target: target, value: value, payload: payload, nonce: org.nonce()});
+    }
+
+    function test_oneAttestationBuysManyCheapActions() public {
+        _breathe(IMAGE, 7_200);
+        assertTrue(org.breathing());
+
+        uint256 total;
+        for (uint256 i; i < 5; ++i) {
+            Organism.Act memory a = _act(Organism.Kind.Evolve, address(0), 0, keccak256(abi.encode(i)));
+            uint256 g = gasleft();
+            org.actSigned(_sign(a, enclaveKey), a);
+            total += g - gasleft();
+        }
+        assertEq(org.generation(), 5);
+        console.log("avg gas per signed action:", total / 5);
+        assertLt(total / 5, 120_000, "acting is cheap once the hardware has spoken");
+    }
+
+    function test_onlyTheMeasuredImageMayMintABreath() public {
+        bytes32 digest =
+            keccak256(abi.encode(address(org), block.chainid, enclaveAddr, uint64(7_200), org.nonce()));
+        bytes memory forged = dcap.buildReport(TAMPERED, RUNTIME, digest);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(Organism.NotThisOrganism.selector, dcap.identityFor(TAMPERED, RUNTIME))
+        );
+        org.attestSession(forged, enclaveAddr, 7_200);
+        assertFalse(org.breathing());
+    }
+
+    function test_aStolenBreathCannotOutliveItsWindow() public {
+        _breathe(IMAGE, 100);
+        vm.roll(block.number + 101);
+
+        Organism.Act memory a = _act(Organism.Kind.Spend, provider, 1 ether, bytes32(0));
+        bytes memory sig = _sign(a, enclaveKey);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(Organism.BreathExpired.selector, uint64(101), uint64(block.number))
+        );
+        org.actSigned(sig, a);
+        assertEq(provider.balance, 0, "the key is worthless once the breath is out");
+    }
+
+    function test_anotherKeyCannotActForIt() public {
+        _breathe(IMAGE, 7_200);
+        uint256 attacker = 0xBAD;
+
+        Organism.Act memory a = _act(Organism.Kind.Spend, provider, 1 ether, bytes32(0));
+        bytes memory sig = _sign(a, attacker);
+
+        vm.expectRevert(abi.encodeWithSelector(Organism.WrongSigner.selector, vm.addr(attacker)));
+        org.actSigned(sig, a);
+    }
+
+    function test_aSignedActionCannotBeReplayed() public {
+        _breathe(IMAGE, 7_200);
+        Organism.Act memory a = _act(Organism.Kind.Spend, provider, 1 ether, bytes32(0));
+        bytes memory sig = _sign(a, enclaveKey);
+
+        org.actSigned(sig, a);
+        vm.expectRevert(abi.encodeWithSelector(Organism.BadNonce.selector, org.nonce(), a.nonce));
+        org.actSigned(sig, a);
+        assertEq(provider.balance, 1 ether);
+    }
+
+    function test_evenAStolenBreathCannotDrainTheTreasury() public {
+        _breathe(IMAGE, 7_200);
+        Organism.Act memory a = _act(Organism.Kind.Spend, provider, 10 ether, bytes32(0));
+        bytes memory sig = _sign(a, enclaveKey);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(Organism.MetabolicLimit.selector, 10 ether, 2.5 ether)
+        );
+        org.actSigned(sig, a);
+        assertEq(address(org).balance, 10 ether, "metabolism bounds the worst day it can have");
+    }
+
+    function test_aFreshBreathSupersedesTheOld() public {
+        _breathe(IMAGE, 7_200);
+        address firstKey = _breathKey();
+
+        enclaveKey = 0xFEED;
+        enclaveAddr = vm.addr(enclaveKey);
+        _breathe(IMAGE, 7_200);
+
+        assertTrue(_breathKey() != firstKey, "the old key is abandoned, not revoked");
+
+        Organism.Act memory a = _act(Organism.Kind.Evolve, address(0), 0, keccak256("new"));
+        org.actSigned(_sign(a, enclaveKey), a);
+        assertEq(org.generation(), 1);
+    }
+
+    function test_sessionsCannotBeMadeArbitrarilyLong() public {
+        bytes32 digest =
+            keccak256(abi.encode(address(org), block.chainid, enclaveAddr, uint64(50_000), org.nonce()));
+        bytes memory q = dcap.buildReport(IMAGE, RUNTIME, digest);
+
+        vm.expectRevert(abi.encodeWithSelector(Organism.SessionTooLong.selector, uint64(50_000)));
+        org.attestSession(q, enclaveAddr, 50_000);
+    }
+
+    function _breathKey() internal view returns (address k) {
+        (k,) = org.breath();
+    }
+}

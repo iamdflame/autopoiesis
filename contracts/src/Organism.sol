@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.24;
 
+import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 import {IDcapAttestation} from "./tee/IDcapAttestation.sol";
 import {TdxReport} from "./tee/TdxReport.sol";
 
@@ -72,6 +74,9 @@ contract Organism {
     uint16 public constant METABOLIC_RATE_BPS = 2_500; // 25% of treasury per epoch
     uint64 public constant EPOCH = 7_200;
 
+    /// @notice Longest a breath may last before the hardware must speak again.
+    uint64 public constant MAX_SESSION = 7_200; // ~1 day
+
     // -----------------------------------------------------------------
     // State — the only things that may change
     // -----------------------------------------------------------------
@@ -89,6 +94,14 @@ contract Organism {
 
     uint256 public lifetimeEarned;
     uint256 public lifetimeBurned;
+
+    /// @notice An ephemeral key the enclave minted for itself and the hardware vouched for.
+    struct Breath {
+        address key;
+        uint64 expires;
+    }
+
+    Breath public breath;
 
     enum Kind {
         Spend, // buy compute from a 0G provider
@@ -114,6 +127,7 @@ contract Organism {
     event Evolved(uint64 indexed generation, bytes32 from, bytes32 to);
     event Reproduced(address indexed child, bytes32 childIdentity, uint256 endowment);
     event Died(uint64 atBlock, uint256 returned, string cause);
+    event Breathed(address indexed sessionKey, uint64 expires, bytes32 identity);
 
     // -----------------------------------------------------------------
     // Errors
@@ -129,6 +143,10 @@ contract Organism {
     error StillAlive();
     error EmptySoma();
     error TransferFailed();
+    error NoBreath();
+    error BreathExpired(uint64 expired, uint64 now_);
+    error WrongSigner(address recovered);
+    error SessionTooLong(uint64 asked);
 
     // -----------------------------------------------------------------
     // Birth
@@ -160,6 +178,78 @@ contract Organism {
     }
 
     // -----------------------------------------------------------------
+    // Breathing — attest once, act many times
+    // -----------------------------------------------------------------
+
+    /// @notice Prove the hardware, and mint a short-lived key to act through.
+    ///
+    /// @dev    Verifying a DCAP quote on chain costs 4-5M gas: it walks an X.509 chain
+    ///         to Intel's root and checks P-256 signatures in the EVM. An organism that
+    ///         paid that on every heartbeat would spend its life buying permission to
+    ///         exist instead of buying compute, and would starve. So it does not.
+    ///
+    ///         Instead the enclave mints an ephemeral keypair *inside itself*, commits
+    ///         the public half into `report_data`, and lets the hardware vouch for it
+    ///         once. For the life of that breath, actions are authorised by a 3k-gas
+    ///         signature rather than a 5M-gas proof.
+    ///
+    ///         Be clear about what this costs, because it is a real trade and not a free
+    ///         one: for the duration of a breath there *is* a key, and a host that fully
+    ///         compromises a running enclave holds it until the breath expires. Three
+    ///         things bound that. The key never touches disk and dies with the process.
+    ///         `MAX_SESSION` caps exposure at roughly a day. And the blast radius is
+    ///         already bounded by `METABOLIC_RATE_BPS` — a stolen breath can move a
+    ///         quarter of the treasury, not the treasury.
+    ///
+    ///         What is *not* traded away is identity. The measurement still decides who
+    ///         may mint a breath at all, so a compromised host gets one bad day, and
+    ///         never gets to be the organism.
+    function attestSession(bytes calldata rawQuote, address sessionKey, uint64 ttl) external {
+        if (dead) revert Dead();
+        if (ttl == 0 || ttl > MAX_SESSION) revert SessionTooLong(ttl);
+
+        (bool ok, bytes memory report) = attestation.verifyAndAttestOnChain(rawQuote);
+        if (!ok) revert QuoteRejected();
+
+        bytes32 presented = TdxReport.identityOf(report);
+        if (presented != identity) revert NotThisOrganism(presented);
+
+        (bytes32 committed,) = TdxReport.reportData(report);
+        bytes32 digest =
+            keccak256(abi.encode(address(this), block.chainid, sessionKey, ttl, nonce));
+        if (committed != digest) revert ActionNotAttested();
+
+        unchecked {
+            ++nonce;
+        }
+        breath = Breath({key: sessionKey, expires: uint64(block.number) + ttl});
+        lastActed = uint64(block.number);
+        emit Breathed(sessionKey, breath.expires, identity);
+    }
+
+    /// @notice Act under a live breath. ~3k gas of signature instead of 5M of proof.
+    function actSigned(bytes calldata signature, Act calldata a) external {
+        if (dead) revert Dead();
+        if (breath.key == address(0)) revert NoBreath();
+        if (block.number > breath.expires) revert BreathExpired(breath.expires, uint64(block.number));
+        if (a.nonce != nonce) revert BadNonce(nonce, a.nonce);
+
+        bytes32 digest = keccak256(abi.encode(address(this), block.chainid, a));
+        address signer = ECDSA.recover(MessageHashUtils.toEthSignedMessageHash(digest), signature);
+        if (signer != breath.key) revert WrongSigner(signer);
+
+        unchecked {
+            ++nonce;
+        }
+        lastActed = uint64(block.number);
+        _dispatch(a);
+    }
+
+    function breathing() public view returns (bool) {
+        return breath.key != address(0) && block.number <= breath.expires;
+    }
+
+    // -----------------------------------------------------------------
     // The only door
     // -----------------------------------------------------------------
 
@@ -187,7 +277,10 @@ contract Organism {
             ++nonce;
         }
         lastActed = uint64(block.number);
+        _dispatch(a);
+    }
 
+    function _dispatch(Act calldata a) private {
         if (a.kind == Kind.Spend) {
             _spend(a);
         } else if (a.kind == Kind.Evolve) {

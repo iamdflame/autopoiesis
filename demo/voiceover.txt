@@ -1,0 +1,45 @@
+[BLOCK 1 — 0:00 · the failed theft]
+I deployed this contract to 0G mainnet this morning. I hold the deployer's private key. Watch me try to control it.
+
+Owner. Admin. Pause. Upgrade. All revert.
+
+Those functions weren't disabled, and they weren't renounced. They were never written. There is nothing there to call.
+
+[BLOCK 2 — 0:22 · what replaces the owner]
+What replaces the owner is a measurement of silicon.
+
+An Intel processor measures the exact code image before it runs a single instruction. Hash those registers and you get a number identical on every machine running that code, and different on any machine running anything else.
+
+The contract obeys that number and nothing else. Change one byte, and the money stops recognising you. There is no version of stealing this that isn't becoming it.
+
+[BLOCK 3 — 0:52 · what 0G could not do]
+To do that on 0G, something had to exist first. It didn't.
+
+Intel signs attestations on the P-256 curve. The E V M can't verify that curve natively, and 0G shipped with no precompile and no verifier. Automata's own tooling refuses to start on a chain like this. It just says: failed to locate a verifier.
+
+So we deployed the stack. P-256. The collateral store. The router. The Intel T D X quote verifier.
+
+Here it is answering on mainnet. We hand it a malformed quote, and it comes back with Intel's own parser error, in plain English.
+
+0G can verify hardware attestation today. Yesterday it could not.
+
+[BLOCK 4 — 1:35 · the life]
+What it's for.
+
+It earns by answering questions, and spends its own money on 0G Compute to serve inference and fine-tune itself. New weights go to 0G Storage. Nobody deploys that update. It decides.
+
+Proving the hardware costs four and a half million gas. So it proves itself once a day, mints a key inside the enclave, then acts for twelve thousand.
+
+And it can die. Fifty thousand blocks of silence, or an empty treasury, and it's gone.
+
+[BLOCK 5 — 2:05 · the tests]
+Forty-two tests, including the ones that would embarrass us. Altered code cannot touch the treasury. A stolen session cannot outlive its window, or drain more than a quarter.
+
+[BLOCK 6 — 2:20 · honest close]
+One thing isn't done, and I won't hide it. The biosphere is empty.
+
+The first organism needs a real measurement from a real enclave. Guess wrong, and you get something funded, alive, and mute forever. There's a test named after that failure.
+
+So it stays empty until the silicon speaks.
+
+No owner. No key. No off switch.

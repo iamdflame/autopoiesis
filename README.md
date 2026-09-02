@@ -183,6 +183,48 @@ endowment of every child it created. It is removed rather than left wrong.
 
 ---
 
+## Architecture
+
+```mermaid
+flowchart TB
+  subgraph TEE["0G Compute · Intel TDX CVM"]
+    CODE["agent/ — the life loop<br/>measured into MRTD before it runs"]
+    KEY["ephemeral breath key<br/>born in the enclave, never on disk"]
+    QUOTE["TDX quote<br/>report_data = keccak(action)"]
+  end
+  subgraph STORE["0G Storage"]
+    W["soma — model weights<br/>Merkle root"]
+    C["self-corpus — what it lived through"]
+  end
+  subgraph CHAIN["0G Chain · 16661"]
+    DCAP["DCAP entrypoint + V4 verifier + PCCS<br/><i>deployed by this repo</i>"]
+    ORG["Organism.sol<br/>identity · treasury · mortality"]
+    BIO["Biosphere.sol<br/>population · inheritance"]
+  end
+  CODE --> KEY --> QUOTE
+  QUOTE -->|attestSession| DCAP
+  DCAP -->|measurement verified| ORG
+  CODE -->|actSigned| ORG
+  ORG -->|buys compute| TEE
+  CODE -->|fine-tunes itself| W
+  C --> W
+  W -->|Evolve| ORG
+  ORG <-->|spawn · bury · inherit| BIO
+```
+
+### Which 0G modules are used, and how
+
+| module | how this project uses it | where |
+|---|---|---|
+| **0G Chain** (16661) | Holds the genealogy, treasuries, metabolism and mortality — and the entire DCAP attestation stack, which we deployed because the chain did not have one. Every organism's identity, balance and death is chain state. | [`Organism.sol`](contracts/src/Organism.sol), [`Biosphere.sol`](contracts/src/Biosphere.sol) |
+| **0G Compute** | The **direct broker**, not the inference-only Router: an organism must genuinely fine-tune itself for descent to mean anything, and the Router cannot train. It serves inference to earn, and buys its own GPU time to retrain. The provider's TEE is also what produces the quote its identity is built from. | [`agent/src/compute.ts`](agent/src/compute.ts) |
+| **0G Storage** | Model weights (`soma`) and each organism's self-corpus, addressed by Merkle root. A child inherits its parent's `soma` root, so descent is a storage pointer rather than a label. Not used as a pastebin for receipts. | [`agent/src/weights.ts`](agent/src/weights.ts) |
+| **Intel TDX / DCAP** | `MRTD` and `RTMR0..3` are the organism's identity. Quotes are verified **on chain** through the PCCS + DCAP contracts we deployed to 0G. | [`contracts/src/tee/`](contracts/src/tee/) |
+
+**Attest once, act cheaply:** `attestSession` (a full DCAP quote) costs ~4,500,000 gas and runs once per session; `actSigned` costs **12,846 gas**, measured. ~380× cheaper per action.
+
+---
+
 ## What the audit found
 
 Every one of these shipped, passed CI, and was wrong. Each now has a test in

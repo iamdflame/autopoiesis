@@ -42,10 +42,28 @@ Upload **`brand/mark-512.png`**
 Autopoiesis
 ```
 
-### Tagline
+### Tagline  *(hard limit: 100 characters)*
 ```
-A machine that owns itself — running on the Intel TDX attestation stack we deployed to 0G, because the chain didn't have one.
+A machine that owns itself — and the Intel TDX attestation stack 0G was missing.
 ```
+**80 characters, 82 bytes.** Does the two jobs a card has to do among 80 entries: names
+what the thing is, and names what the ecosystem got out of it. "0G was missing" is the
+pointed half — a judge from 0G reads that and wants to know whether it's true.
+
+If the field counts bytes rather than characters and the em dash trips it, use the
+ASCII-only version at exactly 80 of each:
+```
+A machine that owns itself, on the Intel TDX attestation stack we shipped to 0G.
+```
+
+Alternates, if you would rather lead with the paradox than the contribution:
+```
+I hold its private key and cannot control it. Built on the TDX stack 0G was missing.   (84)
+A machine that owns itself. I hold its key and cannot control it.                      (65)
+```
+I would not use these as the primary. The paradox needs a beat to land and the card gives
+it none, whereas the attestation stack scores directly against 0G Integration at 30% — and
+the paradox is the first twenty seconds of the video anyway.
 
 ### Product type
 **`Functional`**

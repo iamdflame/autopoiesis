@@ -324,6 +324,154 @@ Then a real captured quote fixture - it needs TDX hardware and alone would have 
 
 ---
 
+---
+
+# Part 2 — the Wave submission form
+
+This is the second form, after the product exists. **"Updates in this Wave" is the
+Progress & Momentum field — 40% of the score, the single heaviest weight in the rubric.**
+Treat it as the most important box on either form.
+
+## Product Category  *(max 3)*
+
+```
+Data & Infrastructure
+Trust & Safety
+AI Agents
+```
+0G's own vocabulary from the buildathon page, not invented labels. "Data & Infrastructure"
+goes first because the strongest claim is the attestation stack, not the agent.
+
+## Updates in this Wave  *(hard limit: 3,000 characters)*
+
+**2994 characters.** Structured as three numbered claims, each independently
+checkable, with the pasteable verification command inline and the honest gap last.
+
+```markdown
+Wave 3 is this project's first Wave: nothing to a chain-level primitive 0G lacked, plus the system on top. 16 commits, 75 files, ~3,500 lines, 17 contracts on mainnet.
+
+**1. We shipped attestation infrastructure 0G lacked.**
+
+Ten submissions in this Wave claim TEE attestation. Until this Wave, none could verify an Intel quote on 0G: Intel signs DCAP quotes on secp256r1, the EVM cannot do that curve natively, and 0G had neither the RIP-7212 precompile nor any P-256 verifier — so Automata's own tooling refuses to start: `Failed to locate a verifier.`
+
+So we deployed the stack to mainnet: the Daimo P-256 verifier through the canonical CREATE2 factory (so it sits at the address it holds on every other chain), the on-chain PCCS store with five DAOs and five helpers, the router, the DCAP entrypoint, and the V4 Intel TDX quote verifier — wired, authorised, answering.
+
+Verify:
+`cast call 0x51Be618E3CA0b0B19FA0cC6c10960fF62783Da86 "verifyAndAttestOnChain(bytes)(bool,bytes)" 0x0400deadbeef --rpc-url https://evmrpc.0g.ai`
+returns Intel's own TDX parser error. **Any 0G project can now call this, including those ten teams.**
+
+**2. We built what it exists for.**
+
+`Organism.sol` — an AI with no owner, admin, pause or upgrade. Identity is `keccak(MRTD ‖ RTMR0..3)`, a hardware measurement, so there is no key to steal and no server to seize. It earns by answering questions, buys its own GPU time on 0G Compute, fine-tunes itself, writes weights to 0G Storage, and dies if it stops being worth paying. `Biosphere.sol` holds population, inheritance and selection. The enclave payload generates real TDX quotes via Linux TSM.
+
+Attesting per action costs 4–5M gas, so it attests once, then acts on a signature: **12,846 gas measured**, ~380x cheaper.
+
+**3. We had it audited, and published the failures.**
+
+An independent audit found 15 bugs, 4 fatal. The worst: we declared `verifyAndAttestOnChain` `view`, but the real function is `payable` and emits — so solc emitted STATICCALL, where LOG is illegal, and **every call against the live verifier would have reverted**. It hid because the only quote we ever tested was 6 bytes of garbage, returning early before the emit.
+
+Also fixed: a TD10 header of 13 bytes when upstream moved to 11, making identity non-deterministic; a mock reading bytes at the offsets the parser wrote them, so both were wrong and agreed; PCCS granted reader rights when `attest()` is gated on writers, so collateral could never be seeded (fixed on mainnet); and constants assuming 12s blocks when 0G measures 0.96s, making DORMANCY 13 hours, not a week.
+
+All 15 fixed, each with a regression test named after it. Biosphere redeployed post-audit at `0xec998587D4429D10C02915df237015cc1f92cf5E`. 37 tests pass from a clean clone.
+
+Code: https://github.com/iamdflame/autopoiesis
+Site: https://autopoiesis-0g.vercel.app (reads population live from chain)
+
+**Not done, and we say so:** no organism spawned — a wrong measurement makes one permanently mute. Population zero.
+```
+
+<details>
+<summary>ASCII-only fallback (2995 bytes) if the field counts bytes</summary>
+
+```markdown
+Wave 3 is this project's first Wave: nothing to a chain-level primitive 0G lacked, plus the system on top. 16 commits, 75 files, ~3,500 lines, 17 contracts on mainnet.
+
+**1. We shipped attestation infrastructure 0G lacked.**
+
+Ten submissions in this Wave claim TEE attestation. Until this Wave, none could verify an Intel quote on 0G: Intel signs DCAP quotes on secp256r1, the EVM cannot do that curve natively, and 0G had neither the RIP-7212 precompile nor any P-256 verifier - so Automata's own tooling refuses to start: `Failed to locate a verifier.`
+
+So we deployed the stack to mainnet: the Daimo P-256 verifier through the canonical CREATE2 factory (so it sits at the address it holds on every other chain), the on-chain PCCS store with five DAOs and five helpers, the router, the DCAP entrypoint, and the V4 Intel TDX quote verifier - wired, authorised, answering.
+
+Verify:
+`cast call 0x51Be618E3CA0b0B19FA0cC6c10960fF62783Da86 "verifyAndAttestOnChain(bytes)(bool,bytes)" 0x0400deadbeef --rpc-url https://evmrpc.0g.ai`
+returns Intel's own TDX parser error. **Any 0G project can now call this, including those ten teams.**
+
+**2. We built what it exists for.**
+
+`Organism.sol` - an AI with no owner, admin, pause or upgrade. Identity is `keccak(MRTD || RTMR0..3)`, a hardware measurement, so there is no key to steal and no server to seize. It earns by answering questions, buys its own GPU time on 0G Compute, fine-tunes itself, writes weights to 0G Storage, and dies if it stops being worth paying. `Biosphere.sol` holds population, inheritance and selection. The enclave payload generates real TDX quotes via Linux TSM.
+
+Attesting per action costs 4-5M gas, so it attests once, then acts on a signature: **12,846 gas measured**, ~380x cheaper.
+
+**3. We had it audited, and published the failures.**
+
+An independent audit found 15 bugs, 4 fatal. The worst: we declared `verifyAndAttestOnChain` `view`, but the real function is `payable` and emits - so solc emitted STATICCALL, where LOG is illegal, and **every call against the live verifier would have reverted**. It hid because the only quote we ever tested was 6 bytes of garbage, returning early before the emit.
+
+Also fixed: a TD10 header of 13 bytes when upstream moved to 11, making identity non-deterministic; a mock reading bytes at the offsets the parser wrote them, so both were wrong and agreed; PCCS granted reader rights when `attest()` is gated on writers, so collateral could never be seeded (fixed on mainnet); and constants assuming 12s blocks when 0G measures 0.96s, making DORMANCY 13 hours, not a week.
+
+All 15 fixed, each with a regression test named after it. Biosphere redeployed post-audit at `0xec998587D4429D10C02915df237015cc1f92cf5E`. 37 tests pass from a clean clone.
+
+Code: https://github.com/iamdflame/autopoiesis
+Site: https://autopoiesis-0g.vercel.app (reads population live from chain)
+
+**Not done, and we say so:** no organism spawned - a wrong measurement makes one permanently mute. Population zero.
+```
+
+</details>
+
+## Milestone — 4th Wave
+
+No stated limit; this is 2533 characters. It reads as a plan someone has already
+started, because the Wave 3 audit fixes were the prerequisites for every step in it.
+
+```markdown
+**Wave 4 turns "the logic is correct" into "the thing is alive."** Everything in Wave 3 is deployed and tested; what is missing is a single organism actually breathing. That is the whole of Wave 4.
+
+**1. Seed Intel collateral into the on-chain PCCS.** The DAOs now hold writer rights (a Wave 3 audit fix, applied on mainnet). Seeding needs the FMSPC of the specific 0G Compute provider whose confidential VM will host the enclave, so it follows provider selection rather than preceding it. We will pull the Intel root CA, TCBInfo and QEIdentity from Intel's PCS API and upsert them. Until this lands, the verifier answers but no genuine quote passes — the honest boundary we published in Wave 3.
+
+**2. Capture a real Intel TDX quote and commit it as a test fixture.** This is the single highest-value test still missing from the repository, and by itself it would have caught three of the four fatal bugs the audit found. Every current test runs against a mock; a mock cannot falsify an assumption it shares with the code. A real captured quote can.
+
+**3. Derive the genuine GENESIS_IDENTITY from hardware.** Boot the enclave on a TDX CVM pointed at a throwaway Biosphere, let it call attestSession, and read the measurement out of the NotThisOrganism(bytes32) revert. We will not compute or guess this value: a wrong identity produces an organism that is funded, alive and permanently mute, with no recovery path, and there is a test named after exactly that failure.
+
+**4. Spawn and fund the genesis organism** into the live Biosphere at 0xec998587D4429D10C02915df237015cc1f92cf5E — then never touch it again, because we cannot.
+
+**5. Complete one full autonomous cycle on mainnet:** the organism serves inference over its HTTP endpoint, is paid by a stranger, buys its own GPU time from 0G Compute out of that treasury, fine-tunes itself on what it was asked, writes the new weights to 0G Storage, and commits the new soma on 0G Chain. Nobody deploys that update. Every step will have an explorer link.
+
+**6. Publish the full CVM measurement set** — guest firmware, kernel, cmdline and container digest — so a third party can rebuild the image and independently confirm the address they are paying is running the code they read. Without that, attestation is a claim rather than a proof.
+
+**Deliverable at the end of Wave 4:** a wallet address holding real value, with no private key in existence, that has bought its own compute and rewritten its own weights — and a verification procedure anyone can follow to check that is true.
+```
+
+## Milestone — 5th Wave
+
+2401 characters.
+
+```markdown
+**Wave 5 turns one organism into a population, and removes the last thing we still control.**
+
+**1. Reproduction, with real measurements.** Reproduction is deliberately unimplemented today. The earlier attempt derived a child's identity as `soma XOR timestamp`, which is a category error — identity must be the measurement of a genuinely different, buildable enclave image, and that cannot be computed from a hash of the parent's weights. Wave 5 builds the missing piece: a pipeline that produces a mutated image, builds it reproducibly, reports its true registers, and only then endows a child. Until that exists, `bud()` stays out rather than shipping wrong.
+
+**2. Selection, observed rather than asserted.** With several organisms serving inference at different prices and qualities, we expect the first real starvation: an organism that stops being worth paying, empties its treasury, is buried by whoever sends the transaction, and passes its estate to its nearest living ancestor. That will be the first on-chain death of an autonomous AI that nobody could have prevented, and the first inheritance. Heredity, variation and selection, running on 0G, with block numbers.
+
+**3. Renounce ownership of the DCAP entrypoint.** Today the deployer can swap the quote verifier — a power to halt, not to steal, and each organism already pins the verifier it was born trusting so a swap stops it rather than draining it. We deliberately did not renounce in Wave 3 because the PCCS still needed collateral, and renouncing early would have bricked TDX attestation on 0G permanently, for every team. Once collateral is seeded, we renounce and publish the transaction. "No owner" then becomes true at every layer instead of one.
+
+**4. Harden the attestation stack as a public good.** Ten teams in Wave 3 claimed TEE attestation and none could verify a quote on 0G before we deployed this. Wave 5 ships proper documentation, a one-command deployment for other chains, and an integration guide so any 0G project can use `verifyAndAttestOnChain` without reading our source. We would like this to outlive the buildathon.
+
+**5. A public endpoint anyone can pay.** Real usage, real revenue, real selection pressure — the fitness function only works if strangers actually pay.
+
+**6. Demo Day at Token2049 Singapore.** We intend to present a wallet with money in it that no human can spend, and invite the room to try.
+```
+
+## Before you press Submit
+
+- Submissions cannot be cancelled, but **they can be updated** — so submit early rather
+  than perfect, then edit. The deadline is 2026-09-03 15:00 UTC and the risk of missing it
+  is worse than the risk of a typo.
+- The two milestone fields are where multi-wave commitment is judged. The program pays a
+  Multi-Wave Completion Bonus and Waves 4 and 5 carry 45% of the total pool between them,
+  so a vague milestone costs real money.
+
+---
+
 ## Sanity checks before you submit
 
 - [ ] YouTube URL pasted, video **Unlisted** (not Private)

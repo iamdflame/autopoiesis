@@ -418,48 +418,64 @@ Site: https://autopoiesis-0g.vercel.app (reads population live from chain)
 
 </details>
 
-## Milestone — 4th Wave
+## Milestone — 4th Wave  *(hard limit: 1,000 characters)*
 
-No stated limit; this is 2533 characters. It reads as a plan someone has already
-started, because the Wave 3 audit fixes were the prerequisites for every step in it.
-
-```markdown
-**Wave 4 turns "the logic is correct" into "the thing is alive."** Everything in Wave 3 is deployed and tested; what is missing is a single organism actually breathing. That is the whole of Wave 4.
-
-**1. Seed Intel collateral into the on-chain PCCS.** The DAOs now hold writer rights (a Wave 3 audit fix, applied on mainnet). Seeding needs the FMSPC of the specific 0G Compute provider whose confidential VM will host the enclave, so it follows provider selection rather than preceding it. We will pull the Intel root CA, TCBInfo and QEIdentity from Intel's PCS API and upsert them. Until this lands, the verifier answers but no genuine quote passes — the honest boundary we published in Wave 3.
-
-**2. Capture a real Intel TDX quote and commit it as a test fixture.** This is the single highest-value test still missing from the repository, and by itself it would have caught three of the four fatal bugs the audit found. Every current test runs against a mock; a mock cannot falsify an assumption it shares with the code. A real captured quote can.
-
-**3. Derive the genuine GENESIS_IDENTITY from hardware.** Boot the enclave on a TDX CVM pointed at a throwaway Biosphere, let it call attestSession, and read the measurement out of the NotThisOrganism(bytes32) revert. We will not compute or guess this value: a wrong identity produces an organism that is funded, alive and permanently mute, with no recovery path, and there is a test named after exactly that failure.
-
-**4. Spawn and fund the genesis organism** into the live Biosphere at 0xec998587D4429D10C02915df237015cc1f92cf5E — then never touch it again, because we cannot.
-
-**5. Complete one full autonomous cycle on mainnet:** the organism serves inference over its HTTP endpoint, is paid by a stranger, buys its own GPU time from 0G Compute out of that treasury, fine-tunes itself on what it was asked, writes the new weights to 0G Storage, and commits the new soma on 0G Chain. Nobody deploys that update. Every step will have an explorer link.
-
-**6. Publish the full CVM measurement set** — guest firmware, kernel, cmdline and container digest — so a third party can rebuild the image and independently confirm the address they are paying is running the code they read. Without that, attestation is a claim rather than a proof.
-
-**Deliverable at the end of Wave 4:** a wallet address holding real value, with no private key in existence, that has bought its own compute and rewritten its own weights — and a verification procedure anyone can follow to check that is true.
-```
-
-## Milestone — 5th Wave
-
-2401 characters.
+**995 characters.** The earlier draft was 2,534 — this keeps every step and drops the
+justification prose, which the About field already carries.
 
 ```markdown
-**Wave 5 turns one organism into a population, and removes the last thing we still control.**
+Wave 4 turns "correct" into "alive". The Wave 3 stack is deployed and tested; nothing breathes yet.
 
-**1. Reproduction, with real measurements.** Reproduction is deliberately unimplemented today. The earlier attempt derived a child's identity as `soma XOR timestamp`, which is a category error — identity must be the measurement of a genuinely different, buildable enclave image, and that cannot be computed from a hash of the parent's weights. Wave 5 builds the missing piece: a pipeline that produces a mutated image, builds it reproducibly, reports its true registers, and only then endows a child. Until that exists, `bud()` stays out rather than shipping wrong.
+1. **Seed Intel collateral into the PCCS** — root CA, TCBInfo, QEIdentity. The DAOs now hold writer rights (a Wave 3 audit fix); this needs the FMSPC of the provider hosting the enclave.
+2. **Capture a real TDX quote as a test fixture** — the highest-value test missing; alone it catches three of our four fatal bugs.
+3. **Derive GENESIS_IDENTITY from hardware, never guess it** — boot on a TDX CVM against a throwaway Biosphere, read it from the `NotThisOrganism` revert. A wrong identity yields one funded, alive and permanently mute.
+4. **Spawn and fund the genesis organism**, then never touch it again — we cannot.
+5. **One autonomous cycle on mainnet:** serve inference, get paid, buy 0G Compute from its treasury, fine-tune, write weights to 0G Storage, commit the new soma.
 
-**2. Selection, observed rather than asserted.** With several organisms serving inference at different prices and qualities, we expect the first real starvation: an organism that stops being worth paying, empties its treasury, is buried by whoever sends the transaction, and passes its estate to its nearest living ancestor. That will be the first on-chain death of an autonomous AI that nobody could have prevented, and the first inheritance. Heredity, variation and selection, running on 0G, with block numbers.
-
-**3. Renounce ownership of the DCAP entrypoint.** Today the deployer can swap the quote verifier — a power to halt, not to steal, and each organism already pins the verifier it was born trusting so a swap stops it rather than draining it. We deliberately did not renounce in Wave 3 because the PCCS still needed collateral, and renouncing early would have bricked TDX attestation on 0G permanently, for every team. Once collateral is seeded, we renounce and publish the transaction. "No owner" then becomes true at every layer instead of one.
-
-**4. Harden the attestation stack as a public good.** Ten teams in Wave 3 claimed TEE attestation and none could verify a quote on 0G before we deployed this. Wave 5 ships proper documentation, a one-command deployment for other chains, and an integration guide so any 0G project can use `verifyAndAttestOnChain` without reading our source. We would like this to outlive the buildathon.
-
-**5. A public endpoint anyone can pay.** Real usage, real revenue, real selection pressure — the fitness function only works if strangers actually pay.
-
-**6. Demo Day at Token2049 Singapore.** We intend to present a wallet with money in it that no human can spend, and invite the room to try.
+Deliverable: a funded wallet, no private key in existence, that bought its own compute and rewrote its weights.
 ```
+
+<details><summary>ASCII fallback (995 bytes)</summary>
+
+```markdown
+Wave 4 turns "correct" into "alive". The Wave 3 stack is deployed and tested; nothing breathes yet.
+
+1. **Seed Intel collateral into the PCCS** - root CA, TCBInfo, QEIdentity. The DAOs now hold writer rights (a Wave 3 audit fix); this needs the FMSPC of the provider hosting the enclave.
+2. **Capture a real TDX quote as a test fixture** - the highest-value test missing; alone it catches three of our four fatal bugs.
+3. **Derive GENESIS_IDENTITY from hardware, never guess it** - boot on a TDX CVM against a throwaway Biosphere, read it from the `NotThisOrganism` revert. A wrong identity yields one funded, alive and permanently mute.
+4. **Spawn and fund the genesis organism**, then never touch it again - we cannot.
+5. **One autonomous cycle on mainnet:** serve inference, get paid, buy 0G Compute from its treasury, fine-tune, write weights to 0G Storage, commit the new soma.
+
+Deliverable: a funded wallet, no private key in existence, that bought its own compute and rewrote its weights.
+```
+</details>
+
+## Milestone — 5th Wave  *(hard limit: 1,000 characters)*
+
+**1000 characters**, exactly on the line.
+
+```markdown
+Wave 5 turns one organism into a population and removes the last thing we control.
+
+1. **Reproduction with real measurements.** Unimplemented on purpose: a child's identity must be the measurement of a different, buildable image, not a hash of its parent's weights. Wave 5 builds the pipeline that mutates an image, builds it reproducibly, and reports its registers.
+2. **Selection, observed not asserted.** With organisms priced differently we expect the first starvation — treasury empty, buried by whoever sends the tx, estate to its nearest living ancestor. The first on-chain death of an AI nobody could stop.
+3. **Renounce the DCAP entrypoint.** Not in Wave 3: the PCCS needed collateral, and renouncing early would have bricked TDX attestation on 0G for every team. Once seeded, we renounce.
+4. **Harden the attestation stack as a public good** — docs and one-command deploy so it outlives the buildathon.
+5. **Demo Day at Token2049:** a wallet nobody can spend from, and an invitation to try.
+```
+
+<details><summary>ASCII fallback (1000 bytes)</summary>
+
+```markdown
+Wave 5 turns one organism into a population and removes the last thing we control.
+
+1. **Reproduction with real measurements.** Unimplemented on purpose: a child's identity must be the measurement of a different, buildable image, not a hash of its parent's weights. Wave 5 builds the pipeline that mutates an image, builds it reproducibly, and reports its registers.
+2. **Selection, observed not asserted.** With organisms priced differently we expect the first starvation - treasury empty, buried by whoever sends the tx, estate to its nearest living ancestor. The first on-chain death of an AI nobody could stop.
+3. **Renounce the DCAP entrypoint.** Not in Wave 3: the PCCS needed collateral, and renouncing early would have bricked TDX attestation on 0G for every team. Once seeded, we renounce.
+4. **Harden the attestation stack as a public good** - docs and one-command deploy so it outlives the buildathon.
+5. **Demo Day at Token2049:** a wallet nobody can spend from, and an invitation to try.
+```
+</details>
 
 ## Before you press Submit
 

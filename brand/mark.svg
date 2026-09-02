@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <title>Autopoiesis</title>
+  <!-- A sealed die. Hexagonal silicon package, three blades closed with no aperture:
+       the machine has no owner, no key, and no way in. -->
+  <mask id="seal">
+    <polygon points="512.00,40.96 919.93,276.48 919.93,747.52 512.00,983.04 104.07,747.52 104.07,276.48" fill="#fff"/>
+    <g stroke="#000" stroke-width="87.04" stroke-linecap="round"><line x1="689.36" y1="614.40" x2="505.86" y2="932.23"/><line x1="334.64" y1="614.40" x2="151.14" y2="296.57"/><line x1="512.00" y1="307.20" x2="879.00" y2="307.20"/></g>
+  </mask>
+  <rect width="1024" height="1024" fill="#F03C02" mask="url(#seal)"/>
+</svg>

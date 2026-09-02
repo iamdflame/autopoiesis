@@ -133,23 +133,23 @@ commons **live from the chain**, not from hardcoded HTML. End there.
 3. Trim each clip to its block. Too long → playhead at the dull part, `Ctrl+B`, delete.
    Too short → right-click → Speed → `0.9x`.
 4. One transition style throughout: **Dissolve, 0.3s**. Never mix.
-5. Title card, 2s before vo-1, white on black:
-   **Autopoiesis** / *a machine that owns itself* / `0G mainnet · chain 16661`
-6. End card, 3s after vo-6:
-   `github.com/iamdflame/autopoiesis`
-   `0xec998587D4429D10C02915df237015cc1f92cf5E`
-7. **No background music.** Silence under this voice reads as confidence; music makes a
+5. **No title card, no end card.** They would cost 5 seconds against a 3:00 cap and buy
+   nothing: the thumbnail already carries the name and the claim before anyone presses
+   play, and the repo link belongs in the description where it is clickable. Open on
+   shot 1 — a command already running — and end on shot 6's last frame.
+6. **No background music.** Silence under this voice reads as confidence; music makes a
    technical claim sound like an advert.
-8. Confirm total is **under 3:00** — bottom-right of the timeline.
-9. Export **1080p / 30fps / High**, as `autopoiesis-demo.mp4`.
+7. Confirm total is **under 3:00** — bottom-right of the timeline.
+8. Export **1080p / 30fps / High**, as `autopoiesis-demo.mp4`.
 
 ---
 
 ## Part 5 · Publish
 
 1. YouTube, visibility **Unlisted** — not Private, judges must be able to open it.
-2. Title: `Autopoiesis — a machine that owns itself, on 0G mainnet`
-3. Description: the README's opening, the live addresses, and the repo link.
+2. Upload `brand/youtube-thumbnail.png` as a custom thumbnail. It does the work a title
+   card would have done, without spending a second of runtime.
+3. Title and description: `demo/YOUTUBE.md`.
 4. Paste the link into AKINDO before **2026-09-03 15:00 UTC**.
 
 ---

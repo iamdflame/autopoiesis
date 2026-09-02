@@ -77,7 +77,7 @@ can afford to think and one that spends its whole treasury proving it is allowed
 ./scripts/measure.sh                        # explains the procedure
 
 # 4. spawn into the Biosphere that is already live (not a new one)
-BIOSPHERE=0x577B21214e6549044f9c2A58835713Dda0d849dE GENESIS_IDENTITY=0x... \
+BIOSPHERE=0xec998587D4429D10C02915df237015cc1f92cf5E GENESIS_IDENTITY=0x... \
 forge script contracts/script/SpawnGenesis.s.sol --rpc-url og_mainnet --broadcast
 
 # 5. run the enclave on a TDX host, and then never touch it again

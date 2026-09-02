@@ -1,189 +1,170 @@
-# Demo video — everything you need
+# Demo video — the whole kit
 
-**Target: 2 minutes 51 seconds.** Hard cap is 3:00.
+**Requirement (AKINDO):** max 3 minutes · show core functionality, user flow, and 0G
+integration · hosted publicly. **Wave 3 closes 2026-09-03 15:00 UTC.**
+
+Audio runs **2:38** (2:31 at speed 1.05). Target finished video: **2:45–2:55**.
 
 Three files:
-- `demo/voiceover.txt` — paste into ElevenLabs
-- `demo/commands.sh` — the exact commands, all pre-verified against mainnet
+- `demo/voiceover.txt` — the script, in six blocks
+- `demo/run.sh` — plays each terminal shot hands-free
 - this file — shot list, recording, editing
 
 ---
 
-## Part 1 · Make the voiceover (do this FIRST)
+## ⚠ Re-render two voiceover blocks
 
-The voiceover is the skeleton. You record screens to fit *it*, never the other way round.
+Your existing audio for blocks 1, 2, 3 and 5 is still correct. Two changed:
 
-### ElevenLabs settings
+- **BLOCK 4 — mandatory.** It said *"fifty thousand blocks of silence"*. The audit found
+  the block constants were calibrated for ~12s Ethereum blocks; 0G's are ~0.96s, so that
+  was 13 hours rather than a week. `DORMANCY` is now 604,800 and the line reads
+  *"a week of silence"*. The old take states a number that is no longer true.
+- **BLOCK 6 — trimmed** by nine words to buy timing margin.
 
-| setting | value | why |
-|---|---|---|
-| Model | **Eleven Multilingual v2** | best quality for English narration; don't use Turbo for the final |
-| Voice | **Adam**, **Daniel**, or **Brian** | deep, calm, credible. Avoid anything bright or upbeat |
-| Stability | **45** | low enough to breathe, high enough not to wobble |
-| Similarity | **80** | |
-| Style exaggeration | **5** | keep near zero — this is a proof, not a trailer |
-| Speaker boost | **On** | |
-| Speed | **1.0** | only raise to 1.05 if you overrun 3:00 |
-
-### Steps
-
-1. Go to elevenlabs.io → **Text to Speech**.
-2. Set the settings in the table above.
-3. Open `demo/voiceover.txt`. **Do one BLOCK at a time.** Do not paste all six at once.
-4. Copy the text of BLOCK 1 only — *not* the `[BLOCK 1 — ...]` header line.
-5. Click Generate. Listen.
-6. If a word sounds wrong, regenerate that block only. That is why they're split.
-7. Download each block. You'll have six files. Name them `vo-1.mp3` … `vo-6.mp3`.
-
-> **Pronunciation:** the script already spells out `E V M`, `T D X`, and `P-256` so the
-> voice says them as letters. Don't "fix" those into EVM/TDX or it will mispronounce them.
+Everything else, keep.
 
 ---
 
-## Part 2 · Set up your screen
+## Part 1 · Voiceover (ElevenLabs)
 
-Do this before recording anything. It is the difference between amateur and professional.
+| setting | value |
+|---|---|
+| Model | **Eleven Multilingual v2** |
+| Voice | **Adam**, **Daniel**, or **Brian** — calm, credible, not upbeat |
+| Stability | **45** |
+| Similarity | **80** |
+| Style exaggeration | **5** |
+| Speaker boost | **On** |
+| Speed | **1.05** |
 
-1. **Set your screen to 1920×1080.** Settings → Display → Resolution.
-2. **Make the terminal font big.** In your terminal: Preferences → Font → size **18–20**.
-   A judge watching on a phone must be able to read it.
-3. **Terminal colours:** dark background, white text. No rainbow themes.
-4. **Make the terminal window big** — about 80% of the screen. Not fullscreen.
-5. **Clean your desktop.** Close Slack, email, everything. Turn off notifications.
-   (Ubuntu: Settings → Notifications → Do Not Disturb **on**.)
-6. **Hide your bookmarks bar** in the browser: `Ctrl+Shift+B`.
-7. Open a terminal and run:
-   ```bash
-   cd /home/dflame/Documents/Og_b
-   source demo/commands.sh
-   clear
-   ```
-   That loads the addresses so you can paste short commands on camera.
+Paste one block at a time, without its `[BLOCK n — ...]` header. Save as `vo-1.mp3` … `vo-6.mp3`.
+
+The script writes `E V M`, `T D X`, `P-256` spaced out so the voice reads them as letters.
+Don't "correct" those.
 
 ---
 
-## Part 3 · Record the screen
+## Part 2 · Screen setup
 
-**Tool: OBS Studio** (free — `sudo apt install obs-studio`).
+1. Display **1920×1080**.
+2. Terminal font size **18–20**. Dark background, light text, no rainbow theme.
+3. Terminal window ~80% of screen. Not fullscreen.
+4. Notifications off (Ubuntu: Settings → Notifications → Do Not Disturb).
+5. Browser bookmarks bar hidden: `Ctrl+Shift+B`.
+6. `cd /home/dflame/Documents/Og_b`
 
-### One-time OBS setup
-1. Open OBS. If a wizard appears, choose **Optimise for recording**.
-2. Settings → Output → Recording Quality: **High Quality**. Format: **MP4**.
-3. Settings → Video → Base and Output resolution: **1920×1080**. FPS: **30**.
-4. In the **Sources** box, click **+** → **Screen Capture** → OK → OK.
-5. Close settings. You should see your screen inside OBS.
+**OBS**: Sources → **+** → Screen Capture. Settings → Output → **High Quality**, MP4.
+Video → 1920×1080, 30fps. **Mute Mic/Aux** — the voiceover is separate.
 
-### The rule
-**Record each shot as its own clip.** Press *Start Recording*, do one shot, press
-*Stop Recording*. Six clips. If you fluff a shot, delete it and redo just that one.
-
-Do **not** record audio from your microphone — the voiceover is separate. In OBS,
-mute *Mic/Aux* by clicking the speaker icon next to it.
+Record each shot as its own clip. Start recording, run one command, stop.
 
 ---
 
-## Part 4 · The six shots
+## Part 3 · The six shots
 
-Type commands **slowly and deliberately**. Let each result sit on screen for 2 seconds
-before you move on. Dead air is fine — you'll trim it.
+The terminal shots are **hands-free**. You do not type anything on camera — `run.sh`
+types for you, at a natural speed, with every address as a literal. This is why the old
+kit failed: it used `$BIO` and `$RPC`, which are empty unless you `source` first, so
+pasting a single line produced an error mid-take.
 
-### SHOT 1 — the failed theft · ~22s
-Terminal, cleared. Run these one at a time, pausing after each:
+### SHOT 1 — the failed theft · 0:00–0:22 · VO block 1
+```bash
+./demo/run.sh 1
 ```
-cast call $BIO "owner()(address)"      --rpc-url $RPC
-cast call $BIO "admin()(address)"      --rpc-url $RPC
-cast call $BIO "pause()"               --rpc-url $RPC
-cast call $BIO "upgradeTo(address)" $Z --rpc-url $RPC
-```
-Four reverts stacked on screen. **Do not clear between them** — the stack is the point.
+Four reverts stack up: `owner()`, `admin()`, `pause()`, `upgradeTo()`. Then the line
+*"not disabled. not renounced. never written."*
 
-### SHOT 2 — the code · ~30s
-1. Open `contracts/src/Organism.sol` in your editor.
-2. Scroll slowly through the top comment block, then to `bytes32 public immutable identity;`.
-3. Then: `Ctrl+F`, search `onlyOwner`. Let **0 results** sit on screen for 3 seconds.
+This is the best twenty seconds in the video. Nobody demos their own powerlessness.
 
-That "no results" is the shot. Make sure the search box and result count are visible.
+### SHOT 2 — the absence, in the source · 0:22–0:52 · VO block 2
+Editor, not terminal.
+1. Open `contracts/src/Organism.sol`. Scroll the header comment slowly.
+2. Stop on `bytes32 public immutable identity;`.
+3. `Ctrl+F` → type `onlyOwner` → let **0 results** sit on screen for 3 seconds.
 
-### SHOT 3 — 0G can verify hardware now · ~43s
-Back in the terminal, cleared:
-```
-cast code $P256 --rpc-url $RPC | wc -c
-```
-Then the important one — this prints readable English:
-```
-cast call $ENTRY "verifyAndAttestOnChain(bytes)(bool,bytes)" 0x0400deadbeef \
-  --rpc-url $RPC | tail -1 | xargs cast to-ascii
-```
-→ `Quote length is less than Header length`
+Make sure the search box and the result count are both visible. The zero is the shot.
 
-**Hold on that line for 3 full seconds.** It is the best moment in the video.
+### SHOT 3 — 0G can verify Intel hardware now · 0:52–1:35 · VO block 3
+```bash
+./demo/run.sh 3
+```
+Ends on `Quote length is less than Header length` — Intel's own TDX parser answering from
+a 0G contract. **Hold there.** Then the registered V4 verifier address.
 
-Then open a browser to
+Then switch to the browser:
 `https://chainscan.0g.ai/address/0x51Be618E3CA0b0B19FA0cC6c10960fF62783Da86`
-and scroll gently once.
+and scroll once, slowly.
 
-### SHOT 4 — the life loop · ~30s
-1. Open `agent/src/life.ts`. Scroll slowly through `breathe()` and `grow()`.
-2. Then open `README.md` and show the **Measured, not estimated** block.
+### SHOT 4 — what it's for · 1:35–2:05 · VO block 4
+Editor.
+1. Open `agent/src/life.ts`. Scroll through `breathe()` and `grow()` — the comments say
+   what each does.
+2. Open `README.md`, find **Breathing — the engineering trade**, and rest on the gas
+   block: `~4,500,000` against `12,846`.
 
-### SHOT 5 — the tests · ~15s
-Terminal, cleared:
+### SHOT 5 — the tests · 2:05–2:20 · VO block 5
+```bash
+./demo/run.sh 5
 ```
-forge test
-```
-Let the green PASS list fill the screen. Hold 3 seconds on the final count.
+The green PASS list fills the screen. Hold 3 seconds on `37 tests passed`.
 
-### SHOT 6 — the empty biosphere · ~30s
+### SHOT 6 — bound, empty, and honest · 2:20–2:50 · VO block 6
+```bash
+./demo/run.sh 6
 ```
-cast call $BIO "attestation()(address)"    --rpc-url $RPC
-cast call $BIO "populationSize()(uint256)" --rpc-url $RPC
-```
-Hold on the `0`. Then open the site:
+`attestation()`, `quoteVerifier()`, then `populationSize()` → **0**. Hold on the zero.
+
+Then the site — this is the **user flow** the requirement asks for:
 `https://autopoiesis-0g.vercel.app`
-and scroll it slowly, top to bottom, over about 15 seconds. End on the last screen.
+
+Scroll it top to bottom over ~15 seconds. Note the last screen reads population and
+commons **live from the chain**, not from hardcoded HTML. End there.
 
 ---
 
-## Part 5 · Edit it together
+## Part 4 · Edit
 
-**Tool: CapCut Desktop** (free, easiest). DaVinci Resolve if you already know it.
+**CapCut Desktop** (easiest) or DaVinci Resolve.
 
-1. Open CapCut → **New Project**.
-2. Drag `vo-1.mp3` … `vo-6.mp3` onto the timeline, in order, end to end.
-   **The audio is now your ruler.** Everything else fits around it.
-3. Drag your six screen clips onto the video track above the audio.
-4. Line up clip 1 so it starts with vo-1, clip 2 with vo-2, and so on.
-5. **Trim each clip to match its block's length.** Grab the clip edge and drag.
-   If a clip is too short, slow it: right-click → Speed → `0.9x`.
-   If too long, cut the dead air: put the playhead where the boring part starts,
-   press `Ctrl+B` to split, click the dead piece, press `Delete`.
-6. Add **one** transition style between shots: click between two clips → Transitions →
-   **Dissolve**, 0.3s. Use the same one every time. Do not mix transitions.
-7. Add a title card at the very start (2 seconds, before vo-1):
-   Text → big, white on black:
+1. Drag `vo-1.mp3` … `vo-6.mp3` onto the timeline in order, end to end.
+   **The audio is your ruler.**
+2. Drag the six clips onto the video track above, aligned to their blocks.
+3. Trim each clip to its block. Too long → playhead at the dull part, `Ctrl+B`, delete.
+   Too short → right-click → Speed → `0.9x`.
+4. One transition style throughout: **Dissolve, 0.3s**. Never mix.
+5. Title card, 2s before vo-1, white on black:
    **Autopoiesis** / *a machine that owns itself* / `0G mainnet · chain 16661`
-8. Add an end card (3 seconds after vo-6), white on black:
-   `github.com/<your-repo>` and the Biosphere address
-   `0x577B21214e6549044f9c2A58835713Dda0d849dE`
-9. **No background music.** Silence under a voice like this is stronger, and music makes
-   a technical claim sound like an advert.
-10. Check total length is **under 3:00**. Bottom-right of the CapCut timeline.
-11. Export: **1080p, 30fps, High quality**. Save as `autopoiesis-demo.mp4`.
+6. End card, 3s after vo-6:
+   `github.com/iamdflame/autopoiesis`
+   `0xec998587D4429D10C02915df237015cc1f92cf5E`
+7. **No background music.** Silence under this voice reads as confidence; music makes a
+   technical claim sound like an advert.
+8. Confirm total is **under 3:00** — bottom-right of the timeline.
+9. Export **1080p / 30fps / High**, as `autopoiesis-demo.mp4`.
 
 ---
 
-## Part 6 · Publish
+## Part 5 · Publish
 
-1. Upload to YouTube. Set visibility to **Unlisted** (not Private — judges must open it).
+1. YouTube, visibility **Unlisted** — not Private, judges must be able to open it.
 2. Title: `Autopoiesis — a machine that owns itself, on 0G mainnet`
-3. Description: paste the top of the README plus the live addresses.
-4. Copy the link into the AKINDO submission.
+3. Description: the README's opening, the live addresses, and the repo link.
+4. Paste the link into AKINDO before **2026-09-03 15:00 UTC**.
 
 ---
 
-## If you only get one thing right
+## How this scores
 
-Shot 1 and the plain-English line in Shot 3.
+| weight | criterion | what carries it |
+|---|---|---|
+| 40% | Progress & Momentum | 17 mainnet deployments, a full audit found and fixed, 37 tests |
+| 30% | 0G Integration | shot 3 — a chain-level primitive 0G did not have |
+| 20% | Technical Quality | shot 5, and the audit table in the README |
+| 10% | Traction & Communication | shot 6 — the site, and admitting what isn't done |
 
-A builder failing to control their own contract, and a chain answering an Intel
-attestation it could not answer yesterday. Everything else is supporting evidence.
+## If you only nail two things
+
+Shot 1, and the plain-English line in shot 3. A builder failing to control their own
+contract, and a chain answering an Intel attestation it could not answer yesterday.
+Everything else is supporting evidence.

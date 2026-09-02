@@ -23,22 +23,22 @@ Here it is answering on mainnet. We hand it a malformed quote, and it comes back
 
 0G can verify hardware attestation today. Yesterday it could not. The collateral still has to be seeded before a real quote passes, and that is in the README.
 
-[BLOCK 4 — 1:35 · the life]
+[BLOCK 4 — 1:35 · the life]   <<< RE-RENDER THIS BLOCK ONLY — the constants changed >>>
 What it's for.
 
 It earns by answering questions, and spends its own money on 0G Compute to serve inference and fine-tune itself. New weights go to 0G Storage. Nobody deploys that update. It decides.
 
-Proving the hardware costs four and a half million gas. So it proves itself once a day, mints a key inside the enclave, then acts for twelve thousand.
+Proving the hardware costs four and a half million gas. So it proves itself once, mints a key inside the enclave, then acts for twelve thousand.
 
-And it can die. Fifty thousand blocks of silence, or an empty treasury, and it's gone.
+And it can die. A week of silence, or an empty treasury, and it's gone.
 
 [BLOCK 5 — 2:05 · the tests]
 Thirty-seven tests, including the ones that would embarrass us. Altered code cannot touch the treasury. A stolen session cannot outlive its window, or drain more than a quarter.
 
-[BLOCK 6 — 2:20 · honest close]
+[BLOCK 6 — 2:20 · honest close]   <<< RE-RENDER: trimmed for time >>>
 One thing isn't done, and I won't hide it. The biosphere is empty.
 
-The first organism needs a real measurement from a real enclave. Guess wrong, and you get something funded, alive, and mute forever. There's a test named after that failure.
+The first organism needs a real measurement from real hardware. Guess wrong, and you get something funded, alive, and mute forever.
 
 So it stays empty until the silicon speaks.
 

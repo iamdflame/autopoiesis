@@ -31,7 +31,7 @@ Two things are true at once, and both matter:
 
 | | address |
 |---|---|
-| **Biosphere** — population, inheritance, selection | [`0x577B21214e6549044f9c2A58835713Dda0d849dE`](https://chainscan.0g.ai/address/0x577B21214e6549044f9c2A58835713Dda0d849dE) |
+| **Biosphere** — population, inheritance, selection | [`0xec998587D4429D10C02915df237015cc1f92cf5E`](https://chainscan.0g.ai/address/0xec998587D4429D10C02915df237015cc1f92cf5E) |
 | **DCAP entrypoint** — `verifyAndAttestOnChain` | [`0x51Be618E3CA0b0B19FA0cC6c10960fF62783Da86`](https://chainscan.0g.ai/address/0x51Be618E3CA0b0B19FA0cC6c10960fF62783Da86) |
 | **V4 quote verifier** — Intel TDX | [`0xabbd2E13d5eda2D75D1599A7539a3083dfaba715`](https://chainscan.0g.ai/address/0xabbd2E13d5eda2D75D1599A7539a3083dfaba715) |
 | **PCCS router** | [`0xb66b1d67d156Fb7FC21B6cb9Be573C118C37e4f4`](https://chainscan.0g.ai/address/0xb66b1d67d156Fb7FC21B6cb9Be573C118C37e4f4) |
@@ -71,7 +71,7 @@ answering, but **no real quote will verify**. That is the honest boundary of the
 ```bash
 RPC=https://evmrpc.0g.ai
 ENTRY=0x51Be618E3CA0b0B19FA0cC6c10960fF62783Da86
-BIO=0x577B21214e6549044f9c2A58835713Dda0d849dE
+BIO=0xec998587D4429D10C02915df237015cc1f92cf5E
 
 # 1. The V4 verifier is registered for quote version 4.
 cast call $ENTRY "quoteVerifiers(uint16)(address)" 4 --rpc-url $RPC

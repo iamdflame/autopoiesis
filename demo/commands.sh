@@ -25,7 +25,7 @@ cast call $ENTRY "verifyAndAttestOnChain(bytes)(bool,bytes)" 0x0400deadbeef \
 cast call $ENTRY "quoteVerifiers(uint16)(address)" 4 --rpc-url $RPC
 
 # ─── SHOT 5 · the tests ──────────────────────────────────────────────
-forge test --match-path contracts/test/Organism.t.sol
+forge test
 
 # ─── SHOT 6 · the empty biosphere ────────────────────────────────────
 cast call $BIO "attestation()(address)"  --rpc-url $RPC

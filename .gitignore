@@ -8,7 +8,8 @@ broadcast/
 dist/
 .next/
 *.log
-lib/
+# lib/ is NOT ignored: forge-std and openzeppelin are submodules, and ignoring
+# this path is what left a fresh clone unable to build.
 # deployments/*.env - tracked: these are public addresses
 .vendor/
 .vercel/

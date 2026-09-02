@@ -36,25 +36,17 @@ done_(){ printf "  \033[32m✓\033[0m %s\n" "$*"; }
 stage 0 "P256 verifier"
 NET="$NET" "$ROOT/scripts/deploy-p256.sh"
 
-# ── 1 ─ PCCS helpers ────────────────────────────────────────────────────────
+# ── 1+2 ─ PCCS helpers and DAOs ─────────────────────────────────────────────
+# Driven by our own script, not Automata's `make deploy-helpers` / `make deploy-dao`.
+# Those wrap `forge script --broadcast --skip-simulation`, which against 0G's RPC hangs
+# without ever broadcasting — verified twice at ten minutes, zero transactions — while
+# `forge create` on the same endpoint returns in seconds. An earlier version of this
+# orchestrator called the hanging path and never invoked the working one, so following
+# the documented bootstrap could not have worked.
+stage "1+2" "PCCS helpers, DAOs, and authorisation"
+NET="$NET" PRIVATE_KEY="$PRIVATE_KEY" "$ROOT/scripts/deploy-pccs-daos.sh"
+
 DEPLOY_JSON="$VENDOR/pccs/deployment/$CHAIN.json"
-if [ ! -f "$DEPLOY_JSON" ] || [ -z "$(jq -r '.PCKHelper // empty' "$DEPLOY_JSON" 2>/dev/null)" ]; then
-  stage 1 "PCCS helpers"
-  ( cd "$VENDOR/pccs" && make deploy-helpers RPC_URL="$RPC" PRIVATE_KEY="$PRIVATE_KEY" ) \
-    2>&1 | tee "$LOGS/pccs-helpers-$NET.log" | grep -E "Deploy|deployed|0x[0-9a-fA-F]{40}|Error" | tail -12
-else
-  done_ "helpers already recorded in $DEPLOY_JSON"
-fi
-
-# ── 2 ─ PCCS DAOs ───────────────────────────────────────────────────────────
-if [ -z "$(jq -r '.AutomataPcsDao // empty' "$DEPLOY_JSON" 2>/dev/null)" ]; then
-  stage 2 "PCCS DAOs"
-  ( cd "$VENDOR/pccs" && make deploy-dao RPC_URL="$RPC" PRIVATE_KEY="$PRIVATE_KEY" ) \
-    2>&1 | tee "$LOGS/pccs-dao-$NET.log" | grep -E "Deploy|deployed|0x[0-9a-fA-F]{40}|Error" | tail -14
-else
-  done_ "DAOs already recorded"
-fi
-
 [ -f "$DEPLOY_JSON" ] && { echo; echo "  PCCS addresses:"; jq -r 'to_entries[] | "    \(.key) = \(.value)"' "$DEPLOY_JSON"; }
 
 # ── 3-5 ─ DCAP ──────────────────────────────────────────────────────────────

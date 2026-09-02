@@ -21,7 +21,7 @@ So we deployed the stack. P-256. The collateral store. The router. The Intel T D
 
 Here it is answering on mainnet. We hand it a malformed quote, and it comes back with Intel's own parser error, in plain English.
 
-0G can verify hardware attestation today. Yesterday it could not.
+0G can verify hardware attestation today. Yesterday it could not. The collateral still has to be seeded before a real quote passes, and that is in the README.
 
 [BLOCK 4 — 1:35 · the life]
 What it's for.
@@ -33,7 +33,7 @@ Proving the hardware costs four and a half million gas. So it proves itself once
 And it can die. Fifty thousand blocks of silence, or an empty treasury, and it's gone.
 
 [BLOCK 5 — 2:05 · the tests]
-Forty-two tests, including the ones that would embarrass us. Altered code cannot touch the treasury. A stolen session cannot outlive its window, or drain more than a quarter.
+Thirty-seven tests, including the ones that would embarrass us. Altered code cannot touch the treasury. A stolen session cannot outlive its window, or drain more than a quarter.
 
 [BLOCK 6 — 2:20 · honest close]
 One thing isn't done, and I won't hide it. The biosphere is empty.

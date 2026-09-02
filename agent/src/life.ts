@@ -1,58 +1,62 @@
-import { createPublicClient, createWalletClient, http, parseEther, formatEther, type Address, type Hex } from "viem";
+import { createServer } from "node:http";
+import {
+  createPublicClient, createWalletClient, http, formatEther, parseEther,
+  type Address, type Hex,
+} from "viem";
+import { privateKeyToAccount } from "viem/accounts";
 import { Breath, requestQuote, sessionCommitment, actionDigest } from "./enclave.js";
-import { OG_MAINNET } from "../../packages/sdk/src/chain.js";
-import { ComputeClient } from "../../packages/sdk/src/compute.js";
-import { WeightStore } from "../../packages/sdk/src/weights.js";
+import { OG_MAINNET } from "./chain.js";
+import { ComputeClient } from "./compute.js";
+import { WeightStore } from "./weights.js";
 import { ORGANISM_ABI } from "./abi.js";
 
 /**
  * The life loop.
  *
- * There is no operator on the other end of this. Nobody approves these decisions,
- * nobody is paged when they go wrong, and nobody can override them — the treasury
- * obeys the measurement of this file and there is no second door.
+ * Nobody is on the other end of this. Nothing here is approved, nothing is paged, and
+ * no one can override it — the treasury obeys the measurement of this file.
  *
- * So the loop is deliberately simple, and biased toward staying alive:
+ *   breathe   prove the hardware, mint a key, get a session
+ *   serve     answer questions over HTTP; that is the only reason anyone funds it
+ *   feed      buy GPU time from its own treasury
+ *   grow      fine-tune on what it lived through, commit the weights
+ *   persist   never fall silent long enough to be declared dead
  *
- *   breathe   — prove the hardware, mint a key to act through for a day
- *   serve     — answer inference, get paid, accumulate what it learned
- *   feed      — buy the GPU time it needs from its own treasury
- *   grow      — when it has enough new experience, fine-tune itself and commit
- *   bud       — when it is comfortably solvent, endow a mutated child
- *   persist   — never fall silent long enough to be declared dead
- *
- * An organism that gets this wrong does not get a bug report. It starves.
+ * `bud` is deliberately absent. See the note on reproduction at the bottom.
  */
 
 const Kind = { Spend: 0, Evolve: 1, Reproduce: 2 } as const;
 
 export interface Genome {
   organism: Address;
-  /** experiences required before it is worth retraining */
-  maturity: number;
-  /** treasury multiple of a training run, above which it reproduces */
-  fecundity: number;
+  relayPrivateKey: string;
   baseModel: string;
+  maturity: number;
+  servePort: number;
 }
 
 export class Life {
+  /** Rotated on every session. Never persisted, never reused across breaths. */
   private breath = new Breath();
   private pub;
-  private wallet;
+  private relay;
   private compute: ComputeClient;
   private store: WeightStore;
   private experiences: { prompt: string; answer: string }[] = [];
+  private served = 0;
 
   constructor(private genome: Genome) {
     const chain = { ...OG_MAINNET } as never;
-    this.pub = createPublicClient({ chain, transport: http(OG_MAINNET.rpcUrls.default.http[0]) });
-    this.wallet = createWalletClient({
-      account: this.breath.account,
+    const transport = http(OG_MAINNET.rpcUrls.default.http[0]);
+    this.pub = createPublicClient({ chain, transport });
+    // The relay key pays gas and nothing else. It cannot authorise an action.
+    this.relay = createWalletClient({
+      account: privateKeyToAccount(this.genome.relayPrivateKey as Hex),
       chain,
-      transport: http(OG_MAINNET.rpcUrls.default.http[0]),
+      transport,
     });
-    this.compute = new ComputeClient(this.breath.privateKey);
-    this.store = new WeightStore(this.breath.privateKey);
+    this.compute = new ComputeClient(this.genome.relayPrivateKey);
+    this.store = new WeightStore(this.genome.relayPrivateKey);
   }
 
   private read<T>(fn: string, args: unknown[] = []): Promise<T> {
@@ -61,7 +65,7 @@ export class Life {
       abi: ORGANISM_ABI,
       functionName: fn,
       args,
-    }) as Promise<T>;
+    } as never) as Promise<T>;
   }
 
   // ---------------------------------------------------------------
@@ -69,33 +73,29 @@ export class Life {
   // ---------------------------------------------------------------
 
   /**
-   * Prove to the chain that unaltered code is running on genuine hardware, and get a
-   * day's worth of cheap authority in return.
+   * Prove unaltered code is running on genuine hardware, and get a session in return.
    *
-   * Note the ordering, because it is the security of the whole system: the session key
-   * is committed into `report_data` *before* the CPU signs. The hardware is not
-   * vouching for a key someone handed it — it is vouching for a key this code minted
-   * for itself, one block ago, inside memory nobody else can read.
+   * A fresh keypair is minted here on every call. The previous implementation created
+   * one key as a field initialiser and re-attested it forever, so a host that extracted
+   * it once held it for the life of the process — which defeated the whole point of
+   * bounding a session.
    */
-  async breathe(ttl = 7_200n) {
+  async breathe(ttl = 43_200n) {
+    this.breath = new Breath();
+
     const nonce = await this.read<bigint>("nonce");
-    const commitment = sessionCommitment(
-      this.genome.organism,
-      BigInt(OG_MAINNET.id),
-      this.breath.address,
-      ttl,
-      nonce
+    const quote = requestQuote(
+      sessionCommitment(this.genome.organism, BigInt(OG_MAINNET.id), this.breath.address, ttl, nonce)
     );
 
-    const quote = requestQuote(commitment);
-    const hash = await this.wallet.writeContract({
+    const hash = await this.relay.writeContract({
       address: this.genome.organism,
       abi: ORGANISM_ABI,
       functionName: "attestSession",
       args: [quote, this.breath.address, ttl],
-    });
+    } as never);
     await this.pub.waitForTransactionReceipt({ hash });
-    console.log(`[breath] attested — ${ttl} blocks of authority, key ${this.breath.address}`);
+    console.log(`[breath] attested — fresh key ${this.breath.address}, ${ttl} blocks`);
   }
 
   private async submit(kind: number, target: Address, value: bigint, payload: Hex) {
@@ -104,23 +104,58 @@ export class Life {
     const signature = await this.breath.account.signMessage({
       message: { raw: actionDigest(this.genome.organism, BigInt(OG_MAINNET.id), act) },
     });
-    const hash = await this.wallet.writeContract({
+    const hash = await this.relay.writeContract({
       address: this.genome.organism,
       abi: ORGANISM_ABI,
       functionName: "actSigned",
       args: [signature, act],
-    });
+    } as never);
     return this.pub.waitForTransactionReceipt({ hash });
   }
 
   // ---------------------------------------------------------------
-  // serve · feed · grow · bud
+  // serve — the only reason anyone would fund it
   // ---------------------------------------------------------------
 
-  /** Answer a question. This is the only reason anyone would ever fund it. */
+  /**
+   * Take questions over HTTP. Previously this method existed and was never called from
+   * the loop: there was no intake, so `experiences` stayed empty, `grow()` returned on
+   * its first line forever, and "it earns by answering questions" was not wired to
+   * anything. Payment arrives separately, at the contract's `receive()`.
+   */
+  private listen() {
+    createServer(async (req, res) => {
+      if (req.method !== "POST" || !req.url?.startsWith("/ask")) {
+        res.writeHead(404).end("post a json body {\"prompt\": \"...\"} to /ask\n");
+        return;
+      }
+      let body = "";
+      req.on("data", (c) => (body += c));
+      req.on("end", async () => {
+        try {
+          const { prompt } = JSON.parse(body || "{}");
+          if (typeof prompt !== "string" || !prompt.trim()) {
+            res.writeHead(400).end('{"error":"prompt is required"}');
+            return;
+          }
+          const answer = await this.serve(prompt);
+          res.writeHead(200, { "content-type": "application/json" });
+          res.end(JSON.stringify({ answer: answer.content, teeVerified: answer.teeVerified }));
+        } catch (err) {
+          res.writeHead(500).end(JSON.stringify({ error: String(err) }));
+        }
+      });
+    }).listen(this.genome.servePort, () => {
+      console.log(`[serve] listening on :${this.genome.servePort} — POST /ask`);
+    });
+  }
+
   async serve(prompt: string) {
     const res = await this.compute.infer(this.genome.baseModel, [{ role: "user", content: prompt }]);
-    if (res.teeVerified) this.experiences.push({ prompt, answer: res.content });
+    if (res.teeVerified) {
+      this.experiences.push({ prompt, answer: res.content });
+      this.served++;
+    }
     return res;
   }
 
@@ -131,21 +166,14 @@ export class Life {
   }
 
   /**
-   * Fine-tune itself on what it has lived through, and commit the result.
-   *
-   * Nobody deploys this. There is no deployment step and no one to perform it. The
-   * organism trains on 0G Compute, writes the adapter to 0G Storage, and points its own
-   * `soma` at the new weights. It changed its mind, using money it earned, about
-   * questions strangers asked it.
+   * Fine-tune on what it has lived through, and commit the result. Nobody deploys this;
+   * there is no deploy step and no one to perform it.
    */
   async grow() {
     if (this.experiences.length < this.genome.maturity) return false;
 
     console.log(`[grow] retraining on ${this.experiences.length} experiences`);
-    const corpus = Buffer.from(
-      this.experiences.map((e) => JSON.stringify(e)).join("\n"),
-      "utf8"
-    );
+    const corpus = Buffer.from(this.experiences.map((e) => JSON.stringify(e)).join("\n"), "utf8");
     const dataset = await this.store.put(corpus, "self-corpus");
 
     const result = await this.compute.fineTune({
@@ -154,17 +182,10 @@ export class Life {
       baseModel: this.genome.baseModel,
     });
 
-    await this.submit(Kind.Evolve, "0x0000000000000000000000000000000000000000", 0n, result.outputRoot as Hex);
+    await this.submit(Kind.Evolve, ZERO, 0n, result.outputRoot as Hex);
     this.experiences = [];
-    const generation = await this.read<bigint>("generation");
-    console.log(`[grow] generation ${generation} — soma is now ${result.outputRoot}`);
+    console.log(`[grow] generation ${await this.read<bigint>("generation")} — ${result.outputRoot}`);
     return true;
-  }
-
-  /** Endow a child carrying a different image. Heredity with variation. */
-  async bud(childIdentity: Hex, endowment: bigint) {
-    console.log(`[bud] endowing a child with ${formatEther(endowment)} 0G`);
-    await this.submit(Kind.Reproduce, "0x0000000000000000000000000000000000000000", endowment, childIdentity);
   }
 
   // ---------------------------------------------------------------
@@ -172,40 +193,35 @@ export class Life {
   // ---------------------------------------------------------------
 
   async live() {
-    await this.breathe();
+    this.listen();
 
     for (;;) {
       try {
-        const [alive, treasury, , idleFor] = await this.read<
-          [boolean, bigint, bigint, bigint, Hex]
-        >("vitals");
-
-        if (!alive) {
+        if (!(await this.read<boolean>("alive"))) {
           console.log("[end] no longer alive. nothing further to do.");
           return;
         }
         if (!(await this.read<boolean>("breathing"))) await this.breathe();
 
+        const [, treasury, gen, idleFor] =
+          await this.read<[boolean, bigint, bigint, bigint, Hex]>("vitals");
+
         console.log(
-          `[vitals] treasury ${formatEther(treasury)} 0G · idle ${idleFor} blocks · ` +
-            `${this.experiences.length} experiences`
+          `[vitals] treasury ${formatEther(treasury)} 0G · gen ${gen} · idle ${idleFor} · ` +
+            `${this.served} served · ${this.experiences.length} unlearned`
         );
 
         await this.grow();
 
-        // Reproduce only from surplus, never from the capital it needs to think.
-        const trainingCost = parseEther("0.5");
-        if (treasury > trainingCost * BigInt(this.genome.fecundity)) {
-          await this.bud(mutate(await this.read<Hex>("soma")), treasury / 4n);
-        }
-
-        // A heartbeat is not decoration — silence past DORMANCY is death.
-        if (idleFor > 40_000n) {
-          await this.submit(Kind.Evolve, "0x0000000000000000000000000000000000000000", 0n, await this.read<Hex>("soma"));
+        // A heartbeat is not decoration: silence past DORMANCY is permanent death.
+        // DORMANCY is 604,800 blocks (~7 days at 0G's ~1s blocks); act well inside it.
+        if (idleFor > 400_000n) {
+          await this.submit(Kind.Evolve, ZERO, 0n, await this.read<Hex>("soma"));
         }
       } catch (err) {
-        // It cannot call anyone. Log, wait, try again — an organism that crashes on a
-        // bad RPC response and stops retrying has simply chosen to die.
+        // It cannot call anyone. Log, wait, retry. Startup is inside this loop too —
+        // previously the first breathe() sat outside the try, so one bad RPC response
+        // at boot killed the organism permanently.
         console.error("[hurt]", err instanceof Error ? err.message : err);
       }
 
@@ -214,8 +230,21 @@ export class Life {
   }
 }
 
-/** A child's image differs from its parent's. That difference is the whole point. */
-function mutate(soma: Hex): Hex {
-  const n = BigInt(soma) ^ (BigInt(Date.now()) << 32n);
-  return `0x${n.toString(16).padStart(64, "0")}` as Hex;
-}
+const ZERO = "0x0000000000000000000000000000000000000000" as Address;
+
+/**
+ * Reproduction is not implemented, on purpose.
+ *
+ * An earlier version derived a child's identity as `soma XOR timestamp`. That is a
+ * category error: identity must be keccak(keccak(MRTD) ‖ keccak(RTMR0..3)) of a real,
+ * buildable enclave image, and soma is a 0G Storage root. Every child would have been
+ * born with a measurement no enclave could ever produce — funded, alive, and mute
+ * forever, its endowment destroyed. The repo has a test named after exactly that
+ * failure, and the code fired it every sixty seconds once the treasury cleared a
+ * threshold.
+ *
+ * A real `bud()` needs a genuinely different, genuinely buildable image, and the
+ * measurement of an image that does not exist yet cannot be computed from a hash of
+ * the parent's weights. Until there is a pipeline that builds a mutated image and
+ * reports its true registers, this stays unimplemented rather than wrong.
+ */

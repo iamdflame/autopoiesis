@@ -19,6 +19,11 @@ export const ORGANISM_ABI = [
         "internalType": "address"
       },
       {
+        "name": "quoteVerifier_",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
         "name": "biosphere_",
         "type": "address",
         "internalType": "address"
@@ -34,6 +39,45 @@ export const ORGANISM_ABI = [
   {
     "type": "receive",
     "stateMutability": "payable"
+  },
+  {
+    "type": "function",
+    "name": "DORMANCY",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint64",
+        "internalType": "uint64"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "EPOCH",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint64",
+        "internalType": "uint64"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "MAX_SESSION",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint64",
+        "internalType": "uint64"
+      }
+    ],
+    "stateMutability": "view"
   },
   {
     "type": "function",
@@ -175,6 +219,16 @@ export const ORGANISM_ABI = [
         "name": "expires",
         "type": "uint64",
         "internalType": "uint64"
+      },
+      {
+        "name": "allowance",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "spent",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
     "stateMutability": "view"
@@ -230,6 +284,19 @@ export const ORGANISM_ABI = [
       }
     ],
     "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "revokeBreath",
+    "inputs": [
+      {
+        "name": "signature",
+        "type": "bytes",
+        "internalType": "bytes"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
   },
   {
     "type": "function",
@@ -304,6 +371,25 @@ export const ORGANISM_ABI = [
   },
   {
     "type": "event",
+    "name": "BreathRevoked",
+    "inputs": [
+      {
+        "name": "sessionKey",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "atBlock",
+        "type": "uint64",
+        "indexed": false,
+        "internalType": "uint64"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "Breathed",
     "inputs": [
       {
@@ -319,10 +405,10 @@ export const ORGANISM_ABI = [
         "internalType": "uint64"
       },
       {
-        "name": "identity",
-        "type": "bytes32",
+        "name": "allowance",
+        "type": "uint256",
         "indexed": false,
-        "internalType": "bytes32"
+        "internalType": "uint256"
       }
     ],
     "anonymous": false
@@ -469,6 +555,22 @@ export const ORGANISM_ABI = [
   },
   {
     "type": "error",
+    "name": "BreathAllowanceExceeded",
+    "inputs": [
+      {
+        "name": "want",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "left",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
     "name": "BreathExpired",
     "inputs": [
       {
@@ -604,6 +706,22 @@ export const ORGANISM_ABI = [
     "type": "error",
     "name": "TransferFailed",
     "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "VerifierSwapped",
+    "inputs": [
+      {
+        "name": "expected",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "found",
+        "type": "address",
+        "internalType": "address"
+      }
+    ]
   },
   {
     "type": "error",

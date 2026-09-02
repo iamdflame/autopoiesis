@@ -67,12 +67,26 @@ TCB=$(deploy AutomataFmspcTcbDao \
   "$STORAGE" "$P256" "$PCS" "$FMSPC" "$X509" "$CRL")
 
 echo
-echo "Authorising the DAOs to write into storage..."
+echo "Authorising the DAOs..."
+# Two different permissions, and only one of them is the one that matters.
+#
+#   setCallerAuthorization -> _setAuthorizedReader
+#   grantDao               -> _setAuthorizedWriter
+#
+# `attest()` and `readAttestation()` are both gated on the WRITER set (`onlyDao`), so a
+# deployment that only calls setCallerAuthorization looks configured and cannot accept a
+# single byte of Intel collateral. That is exactly what shipped here first, and it was
+# invisible because the failures were sent to /dev/null and reported as a warning.
+#
+# Errors are no longer swallowed: a failed authorisation aborts.
 for d in "$PCS" "$PCK" "$EID" "$TCB"; do
+  cast send "$STORAGE" "grantDao(address)" "$d" \
+    --rpc-url "$RPC" --private-key "$PRIVATE_KEY" >/dev/null
+  printf "  \033[32m✓\033[0m writer %s\n" "$d"
+
   cast send "$STORAGE" "setCallerAuthorization(address,bool)" "$d" true \
-    --rpc-url "$RPC" --private-key "$PRIVATE_KEY" >/dev/null 2>&1 \
-    && printf "  \033[32m✓\033[0m authorised %s\n" "$d" \
-    || printf "  \033[33m!\033[0m could not authorise %s (check the setter name)\n" "$d"
+    --rpc-url "$RPC" --private-key "$PRIVATE_KEY" >/dev/null
+  printf "  \033[32m✓\033[0m reader %s\n" "$d"
 done
 
 echo

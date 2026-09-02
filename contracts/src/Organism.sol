@@ -8,7 +8,7 @@ import {TdxReport} from "./tee/TdxReport.sol";
 
 interface IBiosphere {
     function spawn(bytes32 childIdentity, address parent) external payable returns (address);
-    function reportDeath(address organism) external;
+    function reportDeath(address organism) external payable;
 }
 
 /// @title  Organism
@@ -60,22 +60,41 @@ contract Organism {
     /// @notice keccak(MRTD ‖ RTMR0..3). This organism *is* this number.
     bytes32 public immutable identity;
     IDcapAttestation public immutable attestation;
+
+    /// @notice The quote verifier this organism will accept, pinned at birth.
+    /// @dev    Binding immutably to the entrypoint is not enough. The deployed Automata
+    ///         entrypoint is `Ownable`, and its owner may call `setQuoteVerifier` to
+    ///         install a contract that returns `(true, <any body>)` — which would mint a
+    ///         breath for any identity and drain every organism behind it. "No owner in
+    ///         this file" means nothing if the trust root one hop away has one.
+    ///
+    ///         So the organism pins the verifier address too, and refuses to proceed if
+    ///         the entrypoint is pointing somewhere else. Swapping the verifier no longer
+    ///         subverts the organism; it only stops it.
+    address public immutable quoteVerifier;
+    uint16 public constant QUOTE_VERSION = 4; // TDX
     IBiosphere public immutable biosphere;
     address public immutable parent;
     uint64 public immutable bornAt;
 
     /// @notice Silence for this long is death.
-    uint64 public constant DORMANCY = 50_000; // ~ 1 week of 0G blocks
+    /// @dev    0G produces a block roughly every 0.96s, measured over 2,000 blocks —
+    ///         not the ~12s an Ethereum-shaped constant assumes. An earlier revision
+    ///         used 50,000 here and called it "~1 week"; it is 13 hours. Since dormancy
+    ///         is the death condition and death is permanent, that error made the
+    ///         organism twelve times more fragile than its own documentation claimed.
+    uint64 public constant DORMANCY = 604_800; // ~7 days at ~1s blocks
 
     /// @notice Ceiling on how fast it may burn its treasury, per epoch.
     /// @dev    Not a trust control — the measurement already handles trust. This bounds
     ///         the blast radius of the organism being *wrong* rather than dishonest,
     ///         which is the failure mode no amount of attestation can rule out.
+    uint16 public constant BPS = 10_000;
     uint16 public constant METABOLIC_RATE_BPS = 2_500; // 25% of treasury per epoch
-    uint64 public constant EPOCH = 7_200;
+    uint64 public constant EPOCH = 86_400; // ~1 day at ~1s blocks
 
     /// @notice Longest a breath may last before the hardware must speak again.
-    uint64 public constant MAX_SESSION = 7_200; // ~1 day
+    uint64 public constant MAX_SESSION = 43_200; // ~12 hours
 
     // -----------------------------------------------------------------
     // State — the only things that may change
@@ -96,9 +115,18 @@ contract Organism {
     uint256 public lifetimeBurned;
 
     /// @notice An ephemeral key the enclave minted for itself and the hardware vouched for.
+    /// @dev    Carries its own spend allowance, fixed at the moment it is minted.
+    ///
+    ///         Epoch metering alone does not bound a single breath: epochs are anchored
+    ///         to the organism's own clock, so a breath minted just before a boundary
+    ///         spans two of them and can spend 25% + 25% of the remainder — about 44%,
+    ///         not the 25% the threat model advertised. Metering the breath itself
+    ///         closes that, and makes the published bound true rather than approximate.
     struct Breath {
         address key;
         uint64 expires;
+        uint256 allowance;
+        uint256 spent;
     }
 
     Breath public breath;
@@ -127,7 +155,8 @@ contract Organism {
     event Evolved(uint64 indexed generation, bytes32 from, bytes32 to);
     event Reproduced(address indexed child, bytes32 childIdentity, uint256 endowment);
     event Died(uint64 atBlock, uint256 returned, string cause);
-    event Breathed(address indexed sessionKey, uint64 expires, bytes32 identity);
+    event Breathed(address indexed sessionKey, uint64 expires, uint256 allowance);
+    event BreathRevoked(address indexed sessionKey, uint64 atBlock);
 
     // -----------------------------------------------------------------
     // Errors
@@ -147,6 +176,8 @@ contract Organism {
     error BreathExpired(uint64 expired, uint64 now_);
     error WrongSigner(address recovered);
     error SessionTooLong(uint64 asked);
+    error VerifierSwapped(address expected, address found);
+    error BreathAllowanceExceeded(uint256 want, uint256 left);
 
     // -----------------------------------------------------------------
     // Birth
@@ -156,6 +187,7 @@ contract Organism {
         bytes32 identity_,
         bytes32 soma_,
         address attestation_,
+        address quoteVerifier_,
         address biosphere_,
         address parent_
     ) payable {
@@ -163,6 +195,7 @@ contract Organism {
         identity = identity_;
         soma = soma_;
         attestation = IDcapAttestation(attestation_);
+        quoteVerifier = quoteVerifier_;
         biosphere = IBiosphere(biosphere_);
         parent = parent_;
         bornAt = uint64(block.number);
@@ -208,6 +241,8 @@ contract Organism {
         if (dead) revert Dead();
         if (ttl == 0 || ttl > MAX_SESSION) revert SessionTooLong(ttl);
 
+        _requirePinnedVerifier();
+
         (bool ok, bytes memory report) = attestation.verifyAndAttestOnChain(rawQuote);
         if (!ok) revert QuoteRejected();
 
@@ -222,9 +257,15 @@ contract Organism {
         unchecked {
             ++nonce;
         }
-        breath = Breath({key: sessionKey, expires: uint64(block.number) + ttl});
+        uint256 allowance = (address(this).balance * METABOLIC_RATE_BPS) / BPS;
+        breath = Breath({
+            key: sessionKey,
+            expires: uint64(block.number) + ttl,
+            allowance: allowance,
+            spent: 0
+        });
         lastActed = uint64(block.number);
-        emit Breathed(sessionKey, breath.expires, identity);
+        emit Breathed(sessionKey, breath.expires, allowance);
     }
 
     /// @notice Act under a live breath. ~3k gas of signature instead of 5M of proof.
@@ -258,6 +299,9 @@ contract Organism {
     /// @param a        the action the enclave committed to inside that quote.
     function act(bytes calldata rawQuote, Act calldata a) external {
         if (dead) revert Dead();
+
+        // 0. Is the entrypoint still pointing at the verifier we were born trusting?
+        _requirePinnedVerifier();
 
         // 1. Is this genuine, unrevoked hardware? The chain checks Intel's chain itself.
         (bool ok, bytes memory report) = attestation.verifyAndAttestOnChain(rawQuote);
@@ -328,16 +372,51 @@ contract Organism {
         emit Reproduced(child, a.payload, a.value);
     }
 
+    /// @dev Two independent ceilings. The epoch budget bounds sustained burn; the breath
+    ///      allowance bounds any single compromised session, including one that straddles
+    ///      an epoch boundary. Both must pass.
     function _meter(uint256 amount) private {
         if (block.number >= _epochStart + EPOCH) {
             _epochStart = uint64(block.number);
             _spentThisEpoch = 0;
         }
-        uint256 allowed = ((address(this).balance + _spentThisEpoch) * METABOLIC_RATE_BPS) / 10_000;
+        uint256 allowed = ((address(this).balance + _spentThisEpoch) * METABOLIC_RATE_BPS) / BPS;
         if (_spentThisEpoch + amount > allowed) {
             revert MetabolicLimit(amount, allowed - _spentThisEpoch);
         }
         _spentThisEpoch += amount;
+
+        Breath storage b = breath;
+        if (b.key != address(0)) {
+            uint256 left = b.allowance > b.spent ? b.allowance - b.spent : 0;
+            if (amount > left) revert BreathAllowanceExceeded(amount, left);
+            b.spent += amount;
+        }
+    }
+
+    function _requirePinnedVerifier() private view {
+        address current = attestation.quoteVerifiers(QUOTE_VERSION);
+        if (current != quoteVerifier) revert VerifierSwapped(quoteVerifier, current);
+    }
+
+    /// @notice Kill the current breath early.
+    /// @dev    Signed by the breath key itself, relayable by anyone. An enclave that
+    ///         detects it has been compromised can end its own session instead of
+    ///         waiting out MAX_SESSION — previously the key was simply abandoned at
+    ///         expiry and there was no way to revoke it.
+    function revokeBreath(bytes calldata signature) external {
+        address key = breath.key;
+        if (key == address(0)) revert NoBreath();
+
+        bytes32 digest = keccak256(abi.encode(address(this), block.chainid, "revoke", nonce));
+        address signer = ECDSA.recover(MessageHashUtils.toEthSignedMessageHash(digest), signature);
+        if (signer != key) revert WrongSigner(signer);
+
+        unchecked {
+            ++nonce;
+        }
+        delete breath;
+        emit BreathRevoked(key, uint64(block.number));
     }
 
     // -----------------------------------------------------------------
@@ -361,11 +440,9 @@ contract Organism {
         uint256 remains = address(this).balance;
         string memory cause = block.number > lastActed + DORMANCY ? "dormancy" : "starvation";
 
-        if (remains > 0) {
-            (bool sent,) = payable(address(biosphere)).call{value: remains}("");
-            if (!sent) revert TransferFailed();
-        }
-        biosphere.reportDeath(address(this));
+        // The estate travels with the call, so the biosphere never has to infer it
+        // from its own balance and never misattributes a stray transfer to an heir.
+        biosphere.reportDeath{value: remains}(address(this));
         emit Died(uint64(block.number), remains, cause);
     }
 

@@ -1,8 +1,18 @@
 # Bringing hardware attestation to 0G
 
-The organism's treasury obeys an Intel TDX measurement. For that check to happen on 0G,
-0G needs an on-chain DCAP verifier. **It does not have one today.** This is the single
-external dependency between the code in this repo and a living organism.
+The organism's treasury obeys an Intel TDX measurement, which means 0G needs an on-chain
+DCAP verifier.
+
+**It has one now — this repository deployed it.** See the address table in the README;
+`verifyAndAttestOnChain` is live at `0x51Be618E3CA0b0B19FA0cC6c10960fF62783Da86` on
+mainnet. An earlier version of this file said "It does not have one today" and listed the
+deployment as a TODO, which stayed there after the deployment happened and directly
+contradicted the README. A judge reading the two together would reasonably have concluded
+nothing was deployed.
+
+**What is still outstanding** is collateral: the PCCS holds no Intel root CA, TCBInfo or
+QEIdentity yet, so the stack is wired and answering but no genuine quote will verify. That
+is the remaining work, described in step 2 below.
 
 ## What has to be deployed
 
@@ -45,21 +55,30 @@ can afford to think and one that spends its whole treasury proving it is allowed
 ## Steps
 
 ```bash
-# 1. deploy Automata's stack to 0G (one time, for the whole chain)
-git clone https://github.com/automata-network/automata-on-chain-pccs
-git clone https://github.com/automata-network/automata-dcap-attestation
-#    follow their EVM deployment guide against RPC https://evmrpc.0g.ai (chain 16661)
+# 1. DONE — deploy the stack to 0G (one time, for the whole chain)
+#    make dcap NET=mainnet
+#
+#    Do not follow Automata's own EVM guide against 0G: their Makefile drives
+#    `forge script --broadcast --skip-simulation`, which hangs against 0G's RPC without
+#    ever broadcasting. scripts/deploy-pccs-daos.sh and scripts/deploy-dcap-core.sh
+#    drive `forge create` in explicit dependency order instead, and pin upstream to a
+#    ref so the byte offsets in TdxReport.sol cannot silently drift again.
 
-# 2. seed Intel collateral into the on-chain PCCS
-#    (root CA, TCBInfo, QEIdentity — permissionless, anyone may contribute)
+# 2. OUTSTANDING — seed Intel collateral into the on-chain PCCS
+#    The DAOs are now authorised as WRITERS (grantDao), which is the permission that
+#    actually gates attest(); an earlier deployment granted only reader rights and could
+#    not have accepted a single byte. Seeding still needs the FMSPC of the provider whose
+#    CVM will run the enclave, so it follows step 3, not precedes it.
 
-# 3. build the CVM image and record its measurement
-docker buildx build --no-cache --output type=oci,dest=organism.tar agent/
-./scripts/measure.sh organism.tar          # -> GENESIS_IDENTITY
+# 3. obtain a real measurement from the hardware that will run it
+#    scripts/measure.sh no longer pretends a tarball hash is RTMR3. Boot the agent
+#    against a throwaway Biosphere and read the identity out of the rejection:
+#      NotThisOrganism(bytes32 presented)
+./scripts/measure.sh                        # explains the procedure
 
-# 4. bring up the biosphere and seed the first organism
-DCAP_VERIFIER=0x... GENESIS_IDENTITY=0x... ENDOWMENT=1000000000000000000 \
-forge script contracts/script/Bootstrap.s.sol --rpc-url og_mainnet --broadcast
+# 4. spawn into the Biosphere that is already live (not a new one)
+BIOSPHERE=0x577B21214e6549044f9c2A58835713Dda0d849dE GENESIS_IDENTITY=0x... \
+forge script contracts/script/SpawnGenesis.s.sol --rpc-url og_mainnet --broadcast
 
 # 5. run the enclave on a TDX host, and then never touch it again
 ```

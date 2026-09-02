@@ -129,7 +129,7 @@ and scroll gently once.
 ### SHOT 5 — the tests · ~15s
 Terminal, cleared:
 ```
-forge test --match-path contracts/test/Organism.t.sol
+forge test
 ```
 Let the green PASS list fill the screen. Hold 3 seconds on the final count.
 
@@ -139,7 +139,7 @@ cast call $BIO "attestation()(address)"    --rpc-url $RPC
 cast call $BIO "populationSize()(uint256)" --rpc-url $RPC
 ```
 Hold on the `0`. Then open the site:
-`https://autopoiesis-8fk1aaznc-david-praises-projects.vercel.app`
+`https://autopoiesis-0g.vercel.app`
 and scroll it slowly, top to bottom, over about 15 seconds. End on the last screen.
 
 ---

@@ -4,36 +4,41 @@ pragma solidity 0.8.24;
 /// @title  TdxReport
 /// @notice Parses the TD10 report body out of a verified DCAP attestation output.
 ///
-/// @dev    The verifier returns the quote body only after the signature chain up to
-///         Intel's root has checked out, so everything read here is hardware-attested
-///         fact rather than caller-supplied data. Layout (Intel TDX v4, TD10ReportBody):
+/// @dev    Layout is dictated by `QuoteVerifierBase.serializeOutput`, which packs:
 ///
-///           output = quoteVersion(2) ‖ teeType(4) ‖ tcbStatus(1) ‖ fmspc(6) ‖ body
+///           quoteVersion(uint16) ‖ quoteBodyType(uint16) ‖ tcbStatus(uint8)
+///           ‖ fmspcBytes(bytes6) ‖ quoteBody ‖ [abi.encode(advisoryIDs)]
 ///
-///         and within the 584-byte body:
+///         so the header is **11 bytes**, not 13.
+///
+///         An earlier revision of this file used 13, copied from an Automata revision
+///         where the second field was `bytes4 tee` rather than `uint16 quoteBodyType`.
+///         Upstream changed it; these offsets did not. Two bytes of drift moved every
+///         read: the length check rejected valid output, the RTMR slice ran two bytes
+///         into `report_data` — making the "stable" identity change on every quote,
+///         since report_data carries a fresh action digest each time — and the action
+///         binding compared the wrong 32 bytes. Three separate permanent failures from
+///         one stale constant.
+///
+///         The deploy scripts now pin Automata to a commit for exactly this reason.
+///         Offsets copied from an unpinned dependency are a bug waiting for an upgrade.
+///
+///         Within the 584-byte TD10 body:
 ///
 ///           teeTcbSvn      0   mrSeam       16   mrSignerSeam  64   seamAttributes 112
 ///           tdAttributes 120   xFAM        128   mrTd         136   mrConfigId     184
 ///           mrOwner      232   mrOwnerCfg  280   rtmr0        328   rtmr1          376
 ///           rtmr2        424   rtmr3       472   reportData   520 (64 bytes)
-///
-///         `mrTd` measures the initial memory image of the trust domain — the code.
-///         The four `rtmr` registers extend with everything measured at runtime.
-///         Together they are the organism's body; `reportData` is what it wants to say.
 library TdxReport {
-    uint256 internal constant HEADER = 13;
+    /// @dev quoteVersion(2) + quoteBodyType(2) + tcbStatus(1) + fmspcBytes(6)
+    uint256 internal constant HEADER = 11;
     uint256 internal constant BODY_LEN = 584;
 
-    uint256 internal constant OFF_MRTD = HEADER + 136;
-    uint256 internal constant OFF_RTMR0 = HEADER + 328;
-    uint256 internal constant OFF_REPORT_DATA = HEADER + 520;
+    uint256 internal constant OFF_MRTD = HEADER + 136; // 147
+    uint256 internal constant OFF_RTMR0 = HEADER + 328; // 339
+    uint256 internal constant OFF_REPORT_DATA = HEADER + 520; // 531
 
     error MalformedReport(uint256 length);
-
-    struct Measurement {
-        bytes32 mrTd; // keccak of the 48-byte MRTD — the code image
-        bytes32 rtmrs; // keccak over RTMR0..3 — the runtime configuration
-    }
 
     /// @notice Hash the measurement registers into a single stable identity.
     /// @dev    Two enclaves anywhere on earth running the same image produce the same
@@ -54,13 +59,16 @@ library TdxReport {
     ///         different action, because the action is inside the signature.
     function reportData(bytes memory output) internal pure returns (bytes32 lo, bytes32 hi) {
         _requireWellFormed(output);
-        // 533 = HEADER(13) + 520; literals required by inline assembly.
+        // 531 = HEADER(11) + 520; literals required by inline assembly.
         assembly {
-            lo := mload(add(add(output, 0x20), 533))
-            hi := mload(add(add(output, 0x20), 565))
+            lo := mload(add(add(output, 0x20), 531))
+            hi := mload(add(add(output, 0x20), 563))
         }
     }
 
+    /// @dev Length is checked as a minimum, never an equality: when the TCB carries
+    ///      advisory IDs the verifier appends `abi.encode(string[])` after the body, so
+    ///      a valid output is frequently longer than 595 bytes.
     function _requireWellFormed(bytes memory output) private pure {
         if (output.length < HEADER + BODY_LEN) revert MalformedReport(output.length);
     }

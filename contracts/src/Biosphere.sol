@@ -46,23 +46,49 @@ contract Biosphere {
     error UnknownOrganism(address who);
     error AlreadyBuried(address who);
     error NotTheOrganism();
-    error NothingInCommons();
+    error EndowmentTooSmall(uint256 sent, uint256 required);
     error TransferFailed();
 
     address public immutable attestation;
+    /// @notice The quote verifier every organism spawned here will pin.
+    /// @dev    Carried through to each Organism so that swapping the entrypoint's
+    ///         verifier stops the population rather than subverting it.
+    address public immutable quoteVerifier;
 
-    constructor(address attestation_) {
+    constructor(address attestation_, address quoteVerifier_) {
         attestation = attestation_;
+        quoteVerifier = quoteVerifier_;
     }
 
     /// @notice Bring an organism into existence. Callable by anyone, or by an organism
     ///         reproducing — the biosphere does not distinguish, because nothing about
     ///         parentage should confer authority over the child.
+    /// @dev Minimum endowment. Spawning is permissionless by design — nothing about
+    ///      parentage should confer authority — but a free `spawn` lets anyone inflate
+    ///      the census indefinitely, so a newborn must at least be able to live briefly.
+    uint256 public constant MIN_ENDOWMENT = 0.01 ether;
+
+    /// @notice A child begins life with its parent's weights.
+    /// @dev    Previously every child's soma was `keccak("genesis-soma" ‖ its own id)` —
+    ///         a hash of itself, addressing nothing on 0G Storage. Nothing was inherited
+    ///         and a newborn could not load weights at all, which made the claimed
+    ///         heredity a parent pointer and no more. A child now starts from the
+    ///         parent's soma and diverges by training, which is what descent means.
+    function _inheritedSoma(address parent, bytes32 identity) private view returns (bytes32) {
+        if (parent != address(0) && record[parent].exists) {
+            bytes32 inherited = Organism(payable(parent)).soma();
+            if (inherited != bytes32(0)) return inherited;
+        }
+        return keccak256(abi.encodePacked("genesis-soma", identity));
+    }
+
     function spawn(bytes32 identity, address parent) public payable returns (address) {
+        if (msg.value < MIN_ENDOWMENT) revert EndowmentTooSmall(msg.value, MIN_ENDOWMENT);
         Organism o = new Organism{value: msg.value}(
             identity,
-            keccak256(abi.encodePacked("genesis-soma", identity)),
+            _inheritedSoma(parent, identity),
             attestation,
+            quoteVerifier,
             address(this),
             parent
         );
@@ -83,20 +109,24 @@ contract Biosphere {
         return address(o);
     }
 
-    /// @notice Draw the commons down to seed a new line when an old one is extinct.
-    function seedFromCommons(bytes32 identity, uint256 amount) external returns (address) {
-        if (amount == 0 || amount > commons) revert NothingInCommons();
-        commons -= amount;
-        address o = spawnWith(identity, address(0), amount);
-        emit Seeded(o, amount);
-        return o;
-    }
+    /// @dev `seedFromCommons` used to live here: permissionless, with a caller-chosen
+    ///      identity and amount. That let anyone with any TDX box measure their own image
+    ///      and take the entire commons into an organism they controlled — the estate of
+    ///      every extinct line, claimable by whoever called first. A test performed
+    ///      exactly that drain and described it as a feature.
+    ///
+    ///      It is removed rather than patched, because no gate we can write here is
+    ///      honest yet: the commons should flow toward demonstrated fitness, and this
+    ///      contract has no non-gameable measure of that. Until it does, the commons
+    ///      accrues and stays put. Dead capital is better than a faucet for whoever
+    ///      polls hardest.
 
     function spawnWith(bytes32 identity, address parent, uint256 amount) private returns (address) {
         Organism o = new Organism{value: amount}(
             identity,
             keccak256(abi.encodePacked("genesis-soma", identity)),
             attestation,
+            quoteVerifier,
             address(this),
             parent
         );
@@ -116,7 +146,10 @@ contract Biosphere {
     }
 
     /// @notice Called by an organism as it is buried. Its remains have already arrived.
-    function reportDeath(address organism) external {
+    /// @dev Payable, and the estate is `msg.value` rather than a balance difference.
+    ///      Inferring it as `address(this).balance - commons` attributed any stray
+    ///      transfer — this contract has a bare `receive()` — to the next heir.
+    function reportDeath(address organism) external payable {
         if (msg.sender != organism) revert NotTheOrganism();
         Record storage r = record[organism];
         if (!r.exists) revert UnknownOrganism(organism);
@@ -129,7 +162,7 @@ contract Biosphere {
         }
         emit Buried(organism, uint64(block.number));
 
-        uint256 estate = address(this).balance - commons;
+        uint256 estate = msg.value;
         if (estate == 0) return;
 
         address heir = _nearestLivingAncestor(organism);

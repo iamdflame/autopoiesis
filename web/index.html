@@ -194,7 +194,7 @@ body{
 
 <!-- 6 ────────────────────────────────────────────────────────── -->
 <section class="screen" id="six">
-  <p class="tag dim rise" style="margin:0">Live on 0G mainnet &#183; 16 contracts &#183; 0.154 0G spent</p>
+  <p class="tag dim rise" style="margin:0">Live on 0G mainnet &#183; 17 deployments &#183; 0.154 0G spent</p>
   <h2 class="mono-scale rise d1">Receipts</h2>
   <div class="grid">
     <div class="r rise d1"><span class="k">Biosphere</span><span class="addr">0x577B21214e6549044f9c2A58835713Dda0d849dE</span><span class="tag dim">population, inheritance, selection</span></div>
@@ -204,19 +204,55 @@ body{
     <div class="r rise d3"><span class="k">P256 verifier</span><span class="addr">0xc2b78104907F722DABAc4C69f826a522B2754De4</span><span class="tag dim">secp256r1 &#183; 0G had none</span></div>
   </div>
   <div class="state">
-    <div class="rise d3"><span class="tag dim">Population</span><b>0</b></div>
-    <div class="rise d3"><span class="tag dim">Commons</span><b>0</b></div>
-    <div class="rise d4"><span class="tag dim">Tests</span><b>42</b></div>
-    <div class="rise d4"><span class="tag dim">Verifier</span><b>Answering</b></div>
+    <div class="rise d3"><span class="tag dim">Population</span><b id="pop">&#8212;</b></div>
+    <div class="rise d3"><span class="tag dim">Commons</span><b id="commons">&#8212;</b></div>
+    <div class="rise d4"><span class="tag dim">Tests</span><b>37</b></div>
+    <div class="rise d4"><span class="tag dim">Verifier</span><b id="verifier">&#8212;</b></div>
   </div>
   <p class="closing rise d4">The biosphere is empty. Spawning the first organism needs a real
     measurement from a running enclave, and a wrong one produces a creature that is funded,
-    alive, and <b>mute forever</b>. So it stays empty until the silicon speaks.</p>
+    alive, and <b>mute forever</b>. The verifier still needs Intel&#8217;s collateral seeded
+    before a genuine quote will pass. So it stays empty until the silicon speaks.</p>
 </section>
 
 </main>
 
 <script>
+/* Read the chain instead of claiming to have read it.
+   The previous version hardcoded these figures in HTML on a page whose whole argument is
+   that assertions should be checkable. If the RPC is unreachable the fields stay as an
+   em dash — showing nothing is honest, showing a stale number is not. */
+(async () => {
+  const RPC = "https://evmrpc.0g.ai";
+  const BIO = "0x577B21214e6549044f9c2A58835713Dda0d849dE";
+  const ENTRY = "0x51Be618E3CA0b0B19FA0cC6c10960fF62783Da86";
+
+  const call = async (to, data) => {
+    const r = await fetch(RPC, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_call", params: [{ to, data }, "latest"] }),
+    });
+    const j = await r.json();
+    if (j.error) throw new Error(j.error.message);
+    return j.result;
+  };
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+
+  try {
+    // populationSize() and commons()
+    const [pop, com] = await Promise.all([call(BIO, "0x974b8384"), call(BIO, "0xfb72f6d3")]);
+    set("pop", BigInt(pop).toString());
+    set("commons", (Number(BigInt(com)) / 1e18).toFixed(2) + " 0G");
+  } catch { /* leave the em dash */ }
+
+  try {
+    // quoteVerifiers(4) — non-zero means the entrypoint is wired to a verifier
+    const v = await call(ENTRY, "0x86b5dec9" + "4".padStart(64, "0"));
+    set("verifier", BigInt(v) !== 0n ? "Wired" : "Unset");
+  } catch { /* leave the em dash */ }
+})();
+
 (() => {
   const items = document.querySelectorAll(".rise, #two .neg");
   if (matchMedia("(prefers-reduced-motion: reduce)").matches) {

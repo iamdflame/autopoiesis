@@ -48,15 +48,32 @@ export class ComputeClient {
     return this.broker;
   }
 
-  /** Fund the escrow that pays providers as jobs complete. */
-  async deposit(amount: string) {
+  /** @dev The broker exposes fine-tuning only when the account is provisioned for it.
+   *       It is typed optional upstream, and the previous code dereferenced it blindly —
+   *       which typechecked only because the declared SDK version did not exist and the
+   *       real types were never loaded. */
+  private async fineTuner() {
     const b = await this.ready();
-    await b.ledger.addLedger(ethers.parseEther(amount));
+    if (!b.fineTuning) {
+      throw new Error(
+        "0G Compute broker has no fine-tuning service: the ledger is not provisioned " +
+          "for fine-tuning. Call deposit() first, then retry."
+      );
+    }
+    return b.fineTuning;
+  }
+
+  /** Fund the escrow that pays providers as jobs complete.
+   *  @param a0gi amount in A0GI, not wei — the broker's ledger takes a plain number.
+   *              This previously passed `ethers.parseEther(...)`, a bigint of wei, which
+   *              is off by 1e18 and the wrong type besides. */
+  async deposit(a0gi: number) {
+    const b = await this.ready();
+    await b.ledger.addLedger(a0gi);
   }
 
   async listFineTuneProviders() {
-    const b = await this.ready();
-    return b.fineTuning.listService();
+    return (await this.fineTuner()).listService();
   }
 
   /**
@@ -65,14 +82,14 @@ export class ComputeClient {
    * once a verifier is live.
    */
   async fineTune(req: FineTuneRequest): Promise<FineTuneResult> {
-    const b = await this.ready();
-    const providers = await b.fineTuning.listService();
+    const ft = await this.fineTuner();
+    const providers = await ft.listService();
     if (!providers.length) throw new Error("no 0G Compute fine-tuning providers available");
 
     const provider = providers[0];
-    const task = await b.fineTuning.createTask(
+    const task = await ft.createTask(
       provider.provider,
-      provider.serviceName ?? req.baseModel,
+      req.baseModel,
       req.datasetRoot,
       JSON.stringify({
         epochs: req.epochs ?? 3,
@@ -91,10 +108,10 @@ export class ComputeClient {
   }
 
   private async awaitTask(provider: string, taskId: string, timeoutMs = 30 * 60_000) {
-    const b = await this.ready();
+    const ft = await this.fineTuner();
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
-      const t: any = await b.fineTuning.getTask(provider, taskId);
+      const t: any = await ft.getTask(provider, taskId);
       if (t.progress === "Finished" || t.status === "completed") return t;
       if (t.progress === "Failed" || t.status === "failed") {
         throw new Error(`fine-tune failed: ${t.error ?? "unknown"}`);

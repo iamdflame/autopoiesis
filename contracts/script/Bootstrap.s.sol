@@ -18,11 +18,12 @@ contract Bootstrap is Script {
     function run() external {
         uint256 pk = vm.envUint("PRIVATE_KEY");
         address dcap = vm.envAddress("DCAP_VERIFIER");
+        address v4 = vm.envAddress("V4_VERIFIER");
         bytes32 identity = vm.envBytes32("GENESIS_IDENTITY");
         uint256 endowment = vm.envOr("ENDOWMENT", uint256(1 ether));
 
         vm.startBroadcast(pk);
-        Biosphere bio = new Biosphere(dcap);
+        Biosphere bio = new Biosphere(dcap, v4);
         address first = bio.spawn{value: endowment}(identity, address(0));
         vm.stopBroadcast();
 

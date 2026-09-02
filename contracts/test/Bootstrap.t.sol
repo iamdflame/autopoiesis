@@ -11,15 +11,17 @@ import {MockDcap} from "./mocks/MockDcap.sol";
 ///         the Script contract: pulling forge-std/Script through the via-IR pipeline
 ///         exhausts memory on ordinary machines, and the sequence is what matters.
 contract BootstrapTest is Test {
+    address constant V4 = address(0x4444);
     function test_theDeploymentSequenceProducesALivingOrganism() public {
         // 1. the verifier must already exist — `attestation` is immutable, so there is
         //    no deploy-now-repoint-later path. This ordering is load-bearing.
         MockDcap dcap = new MockDcap();
+        dcap.setQuoteVerifier(4, V4);
         bytes32 identity =
             dcap.identityFor(keccak256("enclave-image-v1"), keccak256("runtime-config-v1"));
 
         // 2. biosphere
-        Biosphere bio = new Biosphere(address(dcap));
+        Biosphere bio = new Biosphere(address(dcap), V4);
         assertEq(bio.populationSize(), 0);
 
         // 3. genesis organism, endowed
@@ -45,7 +47,8 @@ contract BootstrapTest is Test {
     ///      that no enclave on earth can ever breathe into. Worth seeing once.
     function test_aWrongIdentityProducesAPermanentlyMuteOrganism() public {
         MockDcap dcap = new MockDcap();
-        Biosphere bio = new Biosphere(address(dcap));
+        dcap.setQuoteVerifier(4, V4);
+        Biosphere bio = new Biosphere(address(dcap), V4);
 
         bytes32 wrong = dcap.identityFor(keccak256("some-other-image"), keccak256("runtime-config-v1"));
         Organism o = Organism(payable(bio.spawn{value: 1 ether}(wrong, address(0))));

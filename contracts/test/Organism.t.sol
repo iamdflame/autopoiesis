@@ -7,6 +7,7 @@ import {Biosphere} from "../src/Biosphere.sol";
 import {MockDcap} from "./mocks/MockDcap.sol";
 
 contract OrganismTest is Test {
+    address constant V4 = address(0x4444);
     MockDcap dcap;
     Biosphere bio;
     Organism org;
@@ -20,7 +21,8 @@ contract OrganismTest is Test {
 
     function setUp() public {
         dcap = new MockDcap();
-        bio = new Biosphere(address(dcap));
+        dcap.setQuoteVerifier(4, V4);
+        bio = new Biosphere(address(dcap), V4);
         org = Organism(payable(bio.spawn{value: 10 ether}(dcap.identityFor(IMAGE, RUNTIME), address(0))));
     }
 
@@ -155,7 +157,7 @@ contract OrganismTest is Test {
         Organism.Act memory a = _act(org, Organism.Kind.Spend, provider, 2.5 ether, bytes32(0));
         org.act(_quote(org, a, IMAGE, RUNTIME), a);
 
-        vm.roll(block.number + 7_200);
+        vm.roll(block.number + org.EPOCH());
 
         Organism.Act memory b = _act(org, Organism.Kind.Spend, provider, 1.8 ether, bytes32(0));
         org.act(_quote(org, b, IMAGE, RUNTIME), b);
@@ -209,7 +211,7 @@ contract OrganismTest is Test {
 
     function test_dormancyIsDeathAndItIsPermanent() public {
         assertTrue(org.alive());
-        vm.roll(block.number + 50_001);
+        vm.roll(block.number + org.DORMANCY() + 1);
         assertFalse(org.alive(), "silence is death");
 
         org.bury();
@@ -236,7 +238,7 @@ contract OrganismTest is Test {
         Organism child = Organism(payable(bio.census(1)));
         uint256 parentBefore = address(org).balance;
 
-        vm.roll(block.number + 50_001);
+        vm.roll(block.number + org.DORMANCY() + 1);
         // keep the parent alive: it acts, resetting its own clock
         Organism.Act memory keepAlive =
             _act(org, Organism.Kind.Evolve, address(0), 0, keccak256("still-here"));
@@ -249,20 +251,44 @@ contract OrganismTest is Test {
     }
 
     function test_anExtinctLineEscheatsToTheCommons() public {
-        vm.roll(block.number + 50_001);
+        vm.roll(block.number + org.DORMANCY() + 1);
         org.bury();
 
-        assertEq(bio.commons(), 10 ether, "with no living ancestor it funds whatever is next");
-
-        address fresh = bio.seedFromCommons(dcap.identityFor(keccak256("new-line"), RUNTIME), 4 ether);
-        assertEq(address(fresh).balance, 4 ether);
-        assertEq(bio.commons(), 6 ether);
-        assertEq(bio.populationSize(), 2);
+        assertEq(bio.commons(), 10 ether, "an extinct line's estate accrues to the commons");
+        assertEq(address(bio).balance, 10 ether, "and the contract actually holds it");
+        assertEq(bio.deaths(), 1);
+        assertEq(bio.living(), 0);
     }
 
-    function test_aStillbornOrganismIsImmediatelyDead() public {
-        address s = bio.spawn{value: 0}(dcap.identityFor(keccak256("no-endowment"), RUNTIME), address(0));
-        assertFalse(Organism(payable(s)).alive(), "no treasury, no life");
+    /// @dev The commons is deliberately not withdrawable. It used to be, by anyone,
+    ///      for any amount, with a caller-chosen identity.
+    function test_theCommonsCannotBeDrainedByWhoeverCallsFirst() public {
+        vm.roll(block.number + org.DORMANCY() + 1);
+        org.bury();
+        assertEq(bio.commons(), 10 ether);
+
+        // there is no longer any function that moves it
+        (bool ok,) = address(bio).call(
+            abi.encodeWithSignature("seedFromCommons(bytes32,uint256)", bytes32(0), uint256(10 ether))
+        );
+        assertFalse(ok, "no drain path exists");
+        assertEq(bio.commons(), 10 ether, "still there");
+    }
+
+    function test_spawningRequiresARealEndowment() public {
+        uint256 min = bio.MIN_ENDOWMENT();
+        bytes32 id = dcap.identityFor(keccak256("spam"), RUNTIME);
+        vm.expectRevert(abi.encodeWithSelector(Biosphere.EndowmentTooSmall.selector, uint256(0), min));
+        bio.spawn{value: 0}(id, address(0));
+    }
+
+    function test_anOrganismThatSpendsItselfToZeroIsDead() public {
+        address s = bio.spawn{value: bio.MIN_ENDOWMENT()}(
+            dcap.identityFor(keccak256("frugal"), RUNTIME), address(0)
+        );
+        assertTrue(Organism(payable(s)).alive(), "born with the minimum, alive");
+        vm.roll(block.number + Organism(payable(s)).DORMANCY() + 1);
+        assertFalse(Organism(payable(s)).alive(), "and dormancy still kills it");
     }
 }
 
@@ -270,6 +296,7 @@ contract OrganismTest is Test {
 // Breathing: attest once, act cheaply, expire safely
 // ─────────────────────────────────────────────────────────────────────
 contract BreathTest is Test {
+    address constant V4 = address(0x4444);
     MockDcap dcap;
     Biosphere bio;
     Organism org;
@@ -285,7 +312,8 @@ contract BreathTest is Test {
     function setUp() public {
         enclaveAddr = vm.addr(enclaveKey);
         dcap = new MockDcap();
-        bio = new Biosphere(address(dcap));
+        dcap.setQuoteVerifier(4, V4);
+        bio = new Biosphere(address(dcap), V4);
         org = Organism(payable(bio.spawn{value: 10 ether}(dcap.identityFor(IMAGE, RUNTIME), address(0))));
     }
 
@@ -411,6 +439,6 @@ contract BreathTest is Test {
     }
 
     function _breathKey() internal view returns (address k) {
-        (k,) = org.breath();
+        (k,,,) = org.breath();
     }
 }
